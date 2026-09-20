@@ -294,7 +294,9 @@ async function executeQuickPrompt(promptId) {
   try {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
-      promptText: finalPrompt
+      promptText: finalPrompt,
+      promptId: prompt.id,
+      categoryName: prompt.name
     });
 
     if (res && res.fullText) {
@@ -594,7 +596,9 @@ async function submitQuickCustomAsk() {
   try {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
-      promptText: finalPrompt
+      promptText: finalPrompt,
+      promptId: 'custom_ask',
+      categoryName: 'คำถามของคุณ'
     });
 
     if (res && res.fullText) {

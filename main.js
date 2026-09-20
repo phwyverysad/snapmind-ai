@@ -54,7 +54,7 @@ const DEFAULT_TEXT_PROMPTS = [
     id: 'answer',
     name: 'คำตอบ',
     icon: 'check-circle',
-    template: 'ตอบคำถามหรือแก้โจทย์จากข้อความต่อไปนี้โดยตรง:\n\n{text}',
+    template: 'ตอบคำถาม แก้โจทย์ หรือให้คำตอบที่ถูกต้องและตรงประเด็นที่สุดจากข้อความต่อไปนี้:\n\n{text}',
     enabled: true
   },
   {
@@ -68,7 +68,7 @@ const DEFAULT_TEXT_PROMPTS = [
     id: 'summarize',
     name: 'สรุป',
     icon: 'file-text',
-    template: 'สรุปเนื้อหาต่อไปนี้ให้กระชับ ได้ใจความสำคัญ:\n\n{text}',
+    template: 'สรุปประเด็นสำคัญของข้อความต่อไปนี้เป็นข้อๆ ให้กระชับ ชัดเจน ได้ใจความครบถ้วน:\n\n{text}',
     enabled: true
   },
   {
@@ -103,7 +103,7 @@ const DEFAULT_TEXT_PROMPTS = [
     id: 'continue_writing',
     name: 'เขียนต่อ',
     icon: 'edit-3',
-    template: 'เขียนเนื้อหาต่อจากข้อความนี้อย่างลื่นไหล สมบูรณ์ และสอดคล้องกัน:\n\n{text}',
+    template: 'เขียนเนื้อหาต่อจากข้อความนี้อย่างลื่นไหล สมบูรณ์ และสอดคล้องกัน (เริ่มเขียนเนื้อหาส่วนต่อไปทันที ไม่ต้องนำข้อความเดิมมาพิมพ์ซ้ำ):\n\n{text}',
     enabled: true
   },
   {
@@ -274,13 +274,26 @@ function loadConfig() {
         currentConfig.textPrompts = JSON.parse(JSON.stringify(DEFAULT_TEXT_PROMPTS));
         configNeedsSave = true;
       } else {
-        // Migrate legacy prompt names to clean unified names matching UI
+        // Migrate legacy prompt names and templates to clean unified versions matching UI
         currentConfig.textPrompts.forEach(p => {
-          if (p.id === 'summarize' && p.name === 'สรุปสั้น') { p.name = 'สรุป'; configNeedsSave = true; }
-          if (p.id === 'translate_th') { p.name = 'แปลภาษา'; configNeedsSave = true; }
-          if (p.id === 'answer' && p.name === 'ตอบคำถาม') { p.name = 'คำตอบ'; configNeedsSave = true; }
-          if (p.id === 'explain' && p.name === 'อธิบายง่ายๆ') { p.name = 'อธิบาย'; configNeedsSave = true; }
-          if (p.id === 'proofread' && p.name === 'ตรวจไวยากรณ์') { p.name = 'ปรับปรุงการเขียน'; configNeedsSave = true; }
+          if (p.id === 'summarize' && p.name !== 'สรุป') { p.name = 'สรุป'; configNeedsSave = true; }
+          if (p.id === 'translate_th' && p.name !== 'แปลภาษา') { p.name = 'แปลภาษา'; configNeedsSave = true; }
+          if (p.id === 'answer' && p.name !== 'คำตอบ') { p.name = 'คำตอบ'; configNeedsSave = true; }
+          if (p.id === 'explain' && p.name !== 'อธิบาย') { p.name = 'อธิบาย'; configNeedsSave = true; }
+          if (p.id === 'proofread' && p.name !== 'ปรับปรุงการเขียน') { p.name = 'ปรับปรุงการเขียน'; configNeedsSave = true; }
+          
+          if (p.id === 'continue_writing' && (!p.template || !p.template.includes('ไม่ต้องนำข้อความเดิมมาพิมพ์ซ้ำ'))) {
+            p.template = 'เขียนเนื้อหาต่อจากข้อความนี้อย่างลื่นไหล สมบูรณ์ และสอดคล้องกัน (เริ่มเขียนเนื้อหาส่วนต่อไปทันที ไม่ต้องนำข้อความเดิมมาพิมพ์ซ้ำ):\n\n{text}';
+            configNeedsSave = true;
+          }
+          if (p.id === 'answer' && p.template && p.template.includes('โดยตรง:\n\n{text}')) {
+            p.template = 'ตอบคำถาม แก้โจทย์ หรือให้คำตอบที่ถูกต้องและตรงประเด็นที่สุดจากข้อความต่อไปนี้:\n\n{text}';
+            configNeedsSave = true;
+          }
+          if (p.id === 'summarize' && p.template && p.template.includes('ให้กระชับ ได้ใจความสำคัญ:\n\n{text}')) {
+            p.template = 'สรุปประเด็นสำคัญของข้อความต่อไปนี้เป็นข้อๆ ให้กระชับ ชัดเจน ได้ใจความครบถ้วน:\n\n{text}';
+            configNeedsSave = true;
+          }
         });
 
         // Ensure all default prompts exist
@@ -296,12 +309,15 @@ function loadConfig() {
         const allAreDefaults = currentConfig.textPrompts.every(p => DEFAULT_TEXT_PROMPTS.some(d => d.id === p.id));
         if (allAreDefaults) {
           const defaultOrder = DEFAULT_TEXT_PROMPTS.map(d => d.id);
-          currentConfig.textPrompts.sort((a, b) => {
-            const idxA = defaultOrder.indexOf(a.id);
-            const idxB = defaultOrder.indexOf(b.id);
-            return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
-          });
-          configNeedsSave = true;
+          const isSorted = currentConfig.textPrompts.every((p, idx) => defaultOrder.indexOf(p.id) === idx);
+          if (!isSorted) {
+            currentConfig.textPrompts.sort((a, b) => {
+              const idxA = defaultOrder.indexOf(a.id);
+              const idxB = defaultOrder.indexOf(b.id);
+              return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+            });
+            configNeedsSave = true;
+          }
         }
       }
 
@@ -312,13 +328,13 @@ function loadConfig() {
       }
 
       if (configNeedsSave) {
-        saveConfig(currentConfig, false);
+        saveConfig(currentConfig, false, true);
       } else if (currentConfig.autoLaunch !== undefined) {
         applyAutoLaunchSetting(currentConfig.autoLaunch);
       }
     } else {
       currentConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      saveConfig(currentConfig, false);
+      saveConfig(currentConfig, false, true);
     }
   } catch (err) {
     console.error('Error loading config:', err);
@@ -328,14 +344,16 @@ function loadConfig() {
 }
 
 // Save Config
-function saveConfig(config, notifyMsg) {
+function saveConfig(config, notifyMsg, skipHotkeyRegister) {
   try {
     currentConfig = { ...currentConfig, ...config };
     if (config && config.autoLaunch !== undefined) {
       applyAutoLaunchSetting(config.autoLaunch);
     }
     fs.writeFileSync(configFilePath, JSON.stringify(currentConfig, null, 2), 'utf8');
-    registerGlobalHotkey();
+    if (!skipHotkeyRegister) {
+      registerGlobalHotkey();
+    }
     if (tray) updateTrayContextMenu();
 
     if (notifyMsg !== false) {
@@ -934,11 +952,19 @@ function closeQuickTextMode() {
   }
 }
 
-function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
-  killNativeHookProcesses();
+let currentActiveCombos = { snip: '', quick: '' };
 
+function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
   const cleanSnip = (shortcutKeyStr || 'Alt+Shift+S').trim().replace(/\s+/g, '');
   const cleanQuick = (quickTextKeyStr || 'Ctrl+CapsLock').trim().replace(/\s+/g, '');
+
+  if (isNativeHookActive && nativeHookProcess && !nativeHookProcess.killed &&
+      currentActiveCombos.snip === cleanSnip && currentActiveCombos.quick === cleanQuick) {
+    console.log('[Native Hook] Hook process already active with matching shortcuts, preserving process.');
+    return;
+  }
+  currentActiveCombos = { snip: cleanSnip, quick: cleanQuick };
+  killNativeHookProcesses();
 
   // 1. Primary: Direct in-process native DLL integration (GeminiTextCopy.dll) - No separate helper .exe process!
   if (nativeBridge.initNativeBridge() && nativeBridge.isDllAvailable()) {
@@ -2273,7 +2299,49 @@ ipcMain.handle('save-image-file', async (event, { dataUrl, defaultFilename }) =>
 });
 
 // --- QUICK TEXT ASK & CUSTOM PROMPTS IPC HANDLERS ---
-const QUICK_TEXT_SYSTEM_INSTRUCTION = "จงตอบเฉพาะผลลัพธ์ของคำสั่งที่ได้รับโดยตรงเท่านั้น ห้ามมีคำทักทาย ห้ามมีเกริ่นนำ (เช่น 'นี่คือคำตอบของคุณ:', 'ผลการแปลมีดังนี้:') และห้ามมีข้อความสนทนาปิดท้าย ให้แสดงเฉพาะตัวคำตอบที่ถูกต้อง กระชับ และตรงประเด็น 100% ตอบและแปลตรงตัวตามเนื้อหาต้นฉบับ 100% (Literal & Verbatim Translation) ประโยคต่อประโยค ย่อหน้าต่อย่อหน้า ห้ามแยกหัวข้อเอง ห้ามสร้างหัวข้อย่อย และห้ามใส่ Markdown bullet points (- ...) หรือจุดรายการเองโดยเด็ดขาดหากต้นฉบับเป็นข้อความธรรมดาหรือย่อหน้าปกติ (ไม่ต้องแยกหัวข้อ ไม่ต้องใส่หัวข้อย่อย ไม่ต้องใส่ bullet points ให้คงย่อหน้าและประโยคตามต้นฉบับเป๊ะๆ) ห้ามแต่งเติมหัวข้อใหม่ ห้ามสรุปความ และห้ามจัดหมวดหมู่ใหม่เองโดยเด็ดขาด (ห้ามเติม 'ชื่อแอปพลิเคชัน:', 'การทำงานหลัก:', 'ประโยชน์:' หรือหัวข้อที่ไม่มีในต้นฉบับ) ให้คงโครงสร้าง ลำดับข้อ และรูปแบบเดิมตามต้นฉบับอย่างสมบูรณ์แบบ";
+const CATEGORY_SYSTEM_INSTRUCTIONS = {
+  answer: "คุณคือผู้ช่วย AI อัจฉริยะที่เชี่ยวชาญการตอบคำถามและแก้โจทย์ จงตอบคำถามหรือแก้โจทย์จากข้อความที่ได้รับอย่างถูกต้อง ชัดเจน และตรงประเด็นที่สุด แสดงผลลัพธ์ทันทีโดยไม่ต้องมีคำทักทายหรือเกริ่นนำ หากเป็นโจทย์ปัญหาหรือโค้ด ให้แสดงขั้นตอนที่จำเป็นและคำตอบอย่างชัดเจน จัดรูปแบบด้วย Markdown ให้อ่านง่าย",
+
+  explain: "คุณคือผู้เชี่ยวชาญในการอธิบายเนื้อหา จงอธิบายความหมาย สาระสำคัญ แนวคิด และบริบทของข้อความที่ได้รับให้เข้าใจง่าย ชัดเจน ตรงประเด็น ใช้ภาษาที่ลื่นไหล เป็นธรรมชาติ จัดย่อหน้าหรือใช้ Markdown bullet points ให้อ่านง่ายสบายตา ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+
+  summarize: "คุณคือผู้เชี่ยวชาญด้านการสรุปความ จงจับใจความสำคัญและสรุปประเด็นหลักของเนื้อหาต่อไปนี้ให้กระชับ ครบถ้วน ได้ใจความที่สุด แสดงผลลัพธ์เป็นข้อๆ ด้วย Markdown bullet points (- ...) สั้นกระชับ อ่านง่าย ตรงประเด็นทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+
+  translate_th: "คุณคือผู้เชี่ยวชาญด้านการแปลภาษา จงแปลเนื้อหาต่อไปนี้เป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำ ห้ามมีคำทักทายหรือเกริ่นนำ แปลตรงตัวตามเนื้อหาต้นฉบับ 100% (Literal & Verbatim Translation) ประโยคต่อประโยค ย่อหน้าต่อย่อหน้า คงโครงสร้างการจัดวางเดิมไว้ให้อ่านง่าย สวยงาม ไม่แต่งเติมหัวข้อใหม่ที่ไม่ปรากฏในต้นฉบับ",
+
+  proofread: "คุณคือบรรณาธิการและผู้เชี่ยวชาญด้านการพิสูจน์อักษร (Proofreader & Copyeditor) จงตรวจคำผิด แก้ไขหลักไวยากรณ์ การเว้นวรรค และขัดเกลาสำนวนของข้อความที่ได้รับให้ถูกต้อง สละสลวย เป็นธรรมชาติ และเป็นมืออาชีพที่สุด โดยแสดงข้อความฉบับปรับปรุงที่ถูกต้องสมบูรณ์แบบทันทีก่อนเป็นอันดับแรก จากนั้นหากมีการแก้ไขสำคัญ สามารถสรุปจุดที่แก้ไขเป็นข้อย่อยสั้นๆ 1-3 ข้อด้านล่างได้ ไม่ต้องมีคำทักทาย",
+
+  shorten: "คุณคือผู้เชี่ยวชาญด้านการย่อความและตัดทอนเนื้อหา จงตัดทอนคำฟุ่มเฟือยและย่อข้อความต่อไปนี้ให้สั้นและกระชับที่สุด โดยยังคงความหมายสำคัญและสาระสำคัญของต้นฉบับครบถ้วน 100% แสดงเฉพาะข้อความที่ย่อแล้วทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+
+  ocr: "คุณคือระบบ Optical Character Recognition (OCR) และ Text Digitizer คุณภาพสูง จงถอดและจัดระเบียบข้อความ สัญลักษณ์ หรือโค้ดต่อไปนี้ออกมาอย่างถูกต้องเป๊ะๆ 100% ตามต้นฉบับ แก้ไขการตัดคำผิดหรือบรรทัดแตกจากการคัดลอก และหากเป็นโค้ดคอมพิวเตอร์ให้จัดวางใน Code Block (```...```) อย่างถูกต้อง ห้ามแปล ห้ามสรุป และห้ามเพิ่มคำทักทาย",
+
+  continue_writing: "คุณคือผู้เชี่ยวชาญในการประพันธ์และเขียนเนื้อหาต่อ (Content Continuation Specialist) ภารกิจของคุณคือ: เขียนเนื้อหาภาคต่อจากข้อความที่ได้รับอย่างลื่นไหล สมบูรณ์ เป็นธรรมชาติ และสอดคล้องกับโทน บริบท และจุดประสงค์ของข้อความเดิมอย่างแนบเนียน ข้อสำคัญที่สุด: ห้ามนำข้อความเดิมมาพิมพ์ซ้ำเด็ดขาด ให้เริ่มเขียนเนื้อหาส่วนที่ต่อจากเดิมโดยตรงทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+
+  define: "คุณคือผู้เชี่ยวชาญด้านสารานุกรมและพจนานุกรม จงอธิบายว่าคำหรือหัวข้อที่ได้รับคืออะไร มีความหมาย นิยาม ความสำคัญ และหลักการทำงานหรือประโยชน์อย่างไร สรุปให้อ่านเข้าใจง่าย ชัดเจน ตรงประเด็นในทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+
+  custom_ask: "คุณคือผู้ช่วย AI อัจฉริยะ จงตอบและปฏิบัติตามคำสั่งของผู้ใช้อย่างถูกต้อง ชัดเจน และตรงประเด็นที่สุด โดยอ้างอิงจากข้อความที่ผู้ใช้กำหนด ให้คำตอบทันทีโดยไม่ต้องมีคำทักทายหรือเกริ่นนำที่ไม่จำเป็น"
+};
+
+function resolveQuickTextCategory(promptId, promptText) {
+  if (promptId && CATEGORY_SYSTEM_INSTRUCTIONS[promptId]) return promptId;
+  if (!promptText || typeof promptText !== 'string') return 'answer';
+  if (promptText.startsWith('ตอบคำถาม') || promptText.startsWith('แก้โจทย์')) return 'answer';
+  if (promptText.startsWith('อธิบาย')) {
+    if (promptText.includes('คืออะไร')) return 'define';
+    return 'explain';
+  }
+  if (promptText.startsWith('สรุป')) return 'summarize';
+  if (promptText.startsWith('แปล')) return 'translate_th';
+  if (promptText.startsWith('ตรวจคำผิด') || promptText.startsWith('ปรับปรุง')) return 'proofread';
+  if (promptText.startsWith('ย่อ')) return 'shorten';
+  if (promptText.startsWith('คัดลอกและถอด') || promptText.startsWith('ถอด')) return 'ocr';
+  if (promptText.startsWith('เขียนเนื้อหาต่อ') || promptText.startsWith('เขียนต่อ')) return 'continue_writing';
+  return 'custom_ask';
+}
+
+function getQuickTextSystemInstruction(categoryId, promptText) {
+  const cat = resolveQuickTextCategory(categoryId, promptText);
+  return CATEGORY_SYSTEM_INSTRUCTIONS[cat] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+}
 
 ipcMain.handle('get-text-prompts', () => {
   if (!currentConfig) loadConfig();
@@ -2393,7 +2461,7 @@ function sanitizeAndOptimizeInputText(rawText) {
   return clean.trim();
 }
 
-ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId }) => {
+ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, promptId, categoryName }) => {
   // Restore original clipboard when user starts sending prompt to AI
   try {
     restoreActiveClipboard();
@@ -2412,16 +2480,26 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId }) =
 
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
 
-  // Fast-track thinking budget: force thinkingBudget: 0 for all flash models in quick text ask to achieve fastest TTFT
+  // Fast-track thinking budget: flash-lite models do NOT support thinkingConfig at all,
+  // gemini-3.8-flash supports thinkingBudget: 0 for fastest TTFT, pro models use configured thinking
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
-  const thinkingConf = isPro
-    ? getThinkingConfigForModel(selectedModel)
-    : { thinkingConfig: { thinkingBudget: 0 } };
+  const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
+  let thinkingConf = {};
+  if (isPro) {
+    thinkingConf = getThinkingConfigForModel(selectedModel);
+  } else if (!isFlashLite) {
+    // Only gemini-3.8-flash and similar flash models that support thinking
+    thinkingConf = { thinkingConfig: { thinkingBudget: 0 } };
+  }
+  // flash-lite: thinkingConf stays empty (no thinkingConfig sent)
+
+  // Dynamically resolve category-specific system instruction so every category performs its intended function
+  const systemInstructionText = getQuickTextSystemInstruction(promptId, promptText);
 
   const requestPayload = {
     system_instruction: {
       parts: [
-        { text: QUICK_TEXT_SYSTEM_INSTRUCTION }
+        { text: systemInstructionText }
       ]
     },
     contents: [
