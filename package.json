@@ -109,8 +109,7 @@
       "installerIcon": "SnapMind.ico",
       "uninstallerIcon": "SnapMind.ico",
       "uninstallDisplayName": "SnapMind AI",
-      "artifactName": "SnapMind_AI_WebSetup.exe",
-      "appPackageUrl": "https://github.com/phwyverysad/snapmind-ai/releases/download/v1.0.0"
+      "artifactName": "SnapMind_AI_WebSetup.exe"
     },
     "nsis": {
       "oneClick": false,
