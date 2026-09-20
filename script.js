@@ -633,9 +633,12 @@ function cancelSnippingUI(fromMain = false) {
   }
 }
 
+const SNIP_RETICLE_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23000000' stroke-width='3' opacity='0.7'/%3E%3Cline x1='16' y1='2' x2='16' y2='9' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='16' y1='23' x2='16' y2='30' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='2' y1='16' x2='9' y2='16' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='23' y1='16' x2='30' y2='16' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230284c7' stroke-width='1.8'/%3E%3Cline x1='16' y1='2' x2='16' y2='9' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='16' y1='23' x2='16' y2='30' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='9' y2='16' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='23' y1='16' x2='30' y2='16' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.2' fill='%23000000' opacity='0.7'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%2338bdf8'/%3E%3C/svg%3E\") 16 16, crosshair";
+
 function setCanvasCursor(newCursor) {
-  if (canvas && canvas.style.cursor !== newCursor) {
-    canvas.style.cursor = newCursor;
+  const targetCursor = (newCursor === 'crosshair') ? SNIP_RETICLE_CURSOR : newCursor;
+  if (canvas && canvas.style.cursor !== targetCursor) {
+    canvas.style.cursor = targetCursor;
   }
 }
 
@@ -818,6 +821,21 @@ function drawScene() {
       ctx.strokeStyle = "#0284c7";
       ctx.lineWidth = 1.5;
       ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+      // Clear dimension badge during selection
+      const sizeText = `${Math.round(box.w)} × ${Math.round(box.h)}`;
+      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
+      const badgeW = ctx.measureText(sizeText).width + 14;
+      const badgeH = 20;
+      const badgeX = Math.max(4, Math.min(box.x, canvas.width - badgeW - 4));
+      const badgeY = (box.y + box.h + 26 < canvas.height) ? (box.y + box.h + 6) : Math.max(4, box.y - 24);
+      
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(sizeText, badgeX + 7, badgeY + 14);
 
       if (!isDrawing) {
         drawInteractiveHandles(box.x, box.y, box.w, box.h);

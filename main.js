@@ -2147,22 +2147,22 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
   const startTime = Date.now();
   const thinkingConf = getThinkingConfigForModel(modelId);
 
-  const unifiedPromptText = `วิเคราะห์ภาพหน้าจอและตอบให้สั้นกระชับ ชัดเจน ครบทุกหัวข้อตามรูปแบบนี้:
+  const unifiedPromptText = `วิเคราะห์ภาพหน้าจออย่างละเอียดและตอบให้ครบทุกหมวดหมู่สั้นกระชับ ชัดเจน ตามลำดับนี้:
 
 ### [ANSWER]
-(คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นทันที หากมีสูตรคณิตศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$)
+(คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นทันที หากมีโจทย์คำถามให้ตอบทันที หากมีสูตรคณิตศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$)
+
+### [OCR]
+(ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ทั้งหมดในภาพต้นฉบับออกมาครบถ้วน 100% ห้ามตัดทอนหรือละทิ้งข้อความใดๆ คงระยะบรรทัดและหัวข้อย่อย หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)")
 
 ### [EXPLAIN]
-(คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าให้อ่านง่าย)
+(คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าให้อ่านง่าย 2-3 บรรทัด)
 
 ### [SUMMARY]
 (สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points 1-3 ข้อ)
 
 ### [TRANSLATE]
 (แปลเนื้อหาภาษาต่างประเทศทั้งหมดในภาพออกมาเป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำภาษาอังกฤษมาแสดงซ้ำ แปลตรงตัว 100% คงโครงสร้างการจัดวางเดิมไว้)
-
-### [OCR]
-(ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ในภาพต้นฉบับออกมาเป๊ะๆ 100% ตามภาษาเดิม คงระยะบรรทัดและตาราง หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)")
 `;
 
   const payload = {
@@ -2176,7 +2176,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 1600,
+      maxOutputTokens: 4096,
       ...thinkingConf
     }
   };
@@ -2199,7 +2199,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     const fullText = streamRes.fullText || '';
 
     let ocrText = '';
-    const ocrMatch = fullText.match(/###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?[\r\n]+([\s\S]*)$/i);
+    const ocrMatch = fullText.match(/###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?[\r\n]+([\s\S]*?)(?:###?\s*\[?(?:EXPLAIN|SUMMARY|TRANSLATE|ANSWER)|$)/i);
     if (ocrMatch && ocrMatch[1]) {
       ocrText = ocrMatch[1].trim();
     }
