@@ -611,6 +611,7 @@ function formatQuickTextMarkdown(rawText) {
 
 let lastFullParseTime = 0;
 let lastRenderedText = '';
+let lastRenderedHtml = '';
 
 function renderAnswerContent(text, isFinal = false) {
   const body = document.getElementById('quickAnswerBody');
@@ -622,9 +623,9 @@ function renderAnswerContent(text, isFinal = false) {
 
   const now = Date.now();
 
-  // Fast-track streaming render: throttle full marked.parse and DOMPurify to every 50ms during active streaming
-  // or on paragraph/line breaks, eliminating DOM tree rebuild overhead on every single frame.
-  const shouldFullParse = isFinal || (now - lastFullParseTime >= 50) || formattedText.endsWith('\n');
+  // Throttle full marked.parse + DOMPurify to every 80ms during active streaming
+  // Allows SSE chunks to batch up naturally before triggering expensive DOM rebuild
+  const shouldFullParse = isFinal || (now - lastFullParseTime >= 80) || formattedText.endsWith('\n');
 
   if (shouldFullParse && typeof marked !== 'undefined') {
     lastFullParseTime = now;
@@ -632,6 +633,13 @@ function renderAnswerContent(text, isFinal = false) {
     if (typeof DOMPurify !== 'undefined') {
       html = DOMPurify.sanitize(html);
     }
+    // Add blinking cursor during active streaming for smooth visual feedback
+    if (!isFinal) {
+      html += '<span class="stream-blink-cursor"></span>';
+    }
+    // Skip redundant DOM update if HTML unchanged (avoids layout thrashing)
+    if (html === lastRenderedHtml) return;
+    lastRenderedHtml = html;
     body.innerHTML = html;
   } else if (!shouldFullParse) {
     // Skip redundant full AST re-parse on micro-interim frames
@@ -642,7 +650,7 @@ function renderAnswerContent(text, isFinal = false) {
 
   // Throttled and conditional KaTeX math rendering: skips expensive DOM walking unless math symbols are present
   const hasMath = formattedText && (formattedText.includes('$') || formattedText.includes('\\(') || formattedText.includes('\\['));
-  if (typeof renderMathInElement === 'function' && hasMath && (isFinal || now - lastMathRenderTime > 250)) {
+  if (typeof renderMathInElement === 'function' && hasMath && (isFinal || now - lastMathRenderTime > 300)) {
     lastMathRenderTime = now;
     try {
       renderMathInElement(body, {

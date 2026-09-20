@@ -1216,6 +1216,30 @@ button *,
   display: none !important;
 }
 
+/* Smooth blinking cursor for live AI streaming output */
+.stream-blink-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #0284c7;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: streamCursorBlink 0.8s steps(2) infinite;
+}
+
+@keyframes streamCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Smooth content transition for streaming text */
+#liveStreamingContent,
+#quickAnswerBody {
+  transition: none;
+  will-change: contents;
+}
+
 /* === GEMINI TOOLS UI STYLES === */
 .tools-grid {
   display: grid;

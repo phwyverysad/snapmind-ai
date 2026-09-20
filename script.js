@@ -1060,6 +1060,8 @@ function getCategoryContent(cat, result) {
 
 let hasReceivedFirstToken = false;
 let screenStreamRenderRaf = null;
+let lastScreenRenderTime = 0;
+let lastScreenRenderedHtml = '';
 
 function scheduleScreenStreamRender() {
   if (screenStreamRenderRaf) return;
@@ -1072,6 +1074,22 @@ function scheduleScreenStreamRender() {
 function renderStreamingContent() {
   const target = document.getElementById('liveStreamingContent');
   if (!target || !hasReceivedFirstToken) return;
+
+  const now = Date.now();
+  // Throttle full Markdown re-parse to every 80ms to avoid DOM rebuild stutter
+  // Allows SSE chunks to batch up naturally before triggering expensive parse+sanitize
+  if (!isStreamingActive || (now - lastScreenRenderTime >= 80)) {
+    lastScreenRenderTime = now;
+  } else {
+    // Schedule another render for when throttle window expires
+    if (!screenStreamRenderRaf) {
+      screenStreamRenderRaf = setTimeout(() => {
+        screenStreamRenderRaf = null;
+        renderStreamingContent();
+      }, 80 - (now - lastScreenRenderTime));
+    }
+    return;
+  }
 
   let textRaw = getCategoryContent(activeCategory, currentAnalysisResult);
 
@@ -1088,6 +1106,10 @@ function renderStreamingContent() {
     if (activeCategory === 'ocr') {
       html = `<div class="ocr-rendered-container">${html}</div>`;
     }
+    // Add blinking cursor during active streaming for smooth visual feedback
+    if (isStreamingActive) {
+      html += '<span class="stream-blink-cursor"></span>';
+    }
   } else if (isStreamingActive) {
     html = `
       <div class="skeleton-container" id="skeletonLoader">
@@ -1098,6 +1120,10 @@ function renderStreamingContent() {
       </div>
     `;
   }
+
+  // Skip redundant DOM update if HTML unchanged (avoids layout thrashing)
+  if (html === lastScreenRenderedHtml) return;
+  lastScreenRenderedHtml = html;
 
   target.innerHTML = html;
   chatThread.scrollTop = chatThread.scrollHeight;
@@ -1138,6 +1164,8 @@ async function processScreenCapture(cropBox) {
     isStreamingActive = true;
     hasReceivedFirstToken = false;
     accumulatedStreamText = '';
+    lastScreenRenderedHtml = '';
+    lastScreenRenderTime = 0;
     currentAnalysisResult = {
       answer: '',
       thinking_process: '',
