@@ -259,7 +259,7 @@ function fastExtractSsePartText(jsonStr) {
   }
 }
 
-// Unified Streaming Engine: Direct Renderer Stream with 1.2s Stalled-Worker Race, LRU Cache, and IPC Fallback
+// Unified Streaming Engine: Direct Renderer Stream with LRU Cache and IPC Fallback
 async function runQuickPromptStreaming({ promptText, promptId, categoryName }) {
   quickAnswerStreamText = '';
 
@@ -287,182 +287,97 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName }) {
       }
 
       const { apiKey, endpointsToTry, requestPayload, selectedModel, resolvedCategory, optimizedPrompt } = params;
-      const STALL_TIMEOUT_MS = 1200;
 
-      const runWorker = async (endpoint, signal, onFirstChunk) => {
+      let streamSuccess = false;
+      let usedEndpoint = selectedModel;
+      let finalFullText = '';
+
+      for (let i = 0; i < (endpointsToTry ? endpointsToTry.length : 0); i++) {
+        const endpoint = endpointsToTry[i];
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
-        let response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-          signal
-        });
-
-        if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
-          try {
-            const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
-            delete fallbackPayload.generationConfig.thinkingConfig;
-            const retryRes = await fetch(apiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(fallbackPayload),
-              signal
-            });
-            if (retryRes.ok) response = retryRes;
-          } catch (retryErr) {}
-        }
-
-        if (!response.ok) {
-          const errText = await response.text().catch(() => '');
-          throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let sseBuffer = '';
-        let streamEnded = false;
-        let localFullText = '';
-        let isFirst = true;
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          sseBuffer += decoder.decode(value, { stream: true });
-          const lines = sseBuffer.split('\n');
-          sseBuffer = lines.pop();
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data:')) continue;
-            const jsonStr = trimmed.replace(/^data:\s*/, '');
-            if (jsonStr === '[DONE]') {
-              streamEnded = true;
-              break;
-            }
-
-            const extracted = fastExtractSsePartText(jsonStr);
-            if (extracted.text) {
-              if (isFirst) {
-                isFirst = false;
-                if (onFirstChunk) onFirstChunk();
-              }
-              localFullText += extracted.text;
-              quickAnswerStreamText = localFullText;
-              scheduleStreamRender();
-            }
-
-            if (extracted.finishReason) {
-              streamEnded = true;
-              break;
-            }
-          }
-
-          if (streamEnded) {
-            try { await reader.cancel(); } catch (e) {}
-            break;
-          }
-        }
-
-        return { success: true, fullText: localFullText, endpoint };
-      };
-
-      // Stalled-Worker Race (1.2s timeout) in renderer
-      let raceResult = null;
-
-      if (endpointsToTry && endpointsToTry.length > 1) {
-        let activeWinner = null;
-        const primaryController = new AbortController();
-        let backupController = null;
-        let stallTimer = null;
-        let primaryFirstToken = false;
 
         try {
-          raceResult = await new Promise((resolve, reject) => {
-            let primaryDone = false;
-            let backupDone = false;
-            let primaryFailed = false;
-            let backupFailed = false;
-
-            const startBackup = () => {
-              if (activeWinner || backupController || primaryFirstToken) return;
-              console.log(`[Renderer Stalled-Worker Race] Primary "${endpointsToTry[0]}" > 1.2s. Starting backup "${endpointsToTry[1]}" in parallel...`);
-              backupController = new AbortController();
-              runWorker(endpointsToTry[1], backupController.signal, () => {
-                if (!activeWinner) {
-                  activeWinner = 'backup';
-                  try { primaryController.abort(); } catch (e) {}
-                }
-              })
-              .then(res => {
-                backupDone = true;
-                if (activeWinner === 'backup' || !activeWinner) {
-                  activeWinner = 'backup';
-                  try { primaryController.abort(); } catch (e) {}
-                  resolve(res);
-                }
-              })
-              .catch(err => {
-                backupFailed = true;
-                if (activeWinner === 'backup' || primaryDone || primaryFailed) {
-                  reject(err);
-                }
-              });
-            };
-
-            stallTimer = setTimeout(() => {
-              startBackup();
-            }, STALL_TIMEOUT_MS);
-
-            runWorker(endpointsToTry[0], primaryController.signal, () => {
-              if (!activeWinner) {
-                activeWinner = 'primary';
-                primaryFirstToken = true;
-                if (stallTimer) {
-                  clearTimeout(stallTimer);
-                  stallTimer = null;
-                }
-                if (backupController) {
-                  try { backupController.abort(); } catch (e) {}
-                }
-              }
-            })
-            .then(res => {
-              primaryDone = true;
-              if (stallTimer) clearTimeout(stallTimer);
-              if (activeWinner === 'primary' || !activeWinner) {
-                activeWinner = 'primary';
-                if (backupController) {
-                  try { backupController.abort(); } catch (e) {}
-                }
-                resolve(res);
-              }
-            })
-            .catch(err => {
-              primaryFailed = true;
-              if (stallTimer) {
-                clearTimeout(stallTimer);
-                stallTimer = null;
-              }
-              if (activeWinner === 'primary') {
-                reject(err);
-              } else if (!backupController) {
-                startBackup();
-              } else if (backupFailed) {
-                reject(err);
-              }
-            });
+          let response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload)
           });
-        } catch (raceErr) {
-          console.warn('[Direct Renderer Stream] Race error:', raceErr.message);
-        } finally {
-          if (stallTimer) clearTimeout(stallTimer);
+
+          if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
+            try {
+              const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
+              delete fallbackPayload.generationConfig.thinkingConfig;
+              const retryRes = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fallbackPayload)
+              });
+              if (retryRes.ok) response = retryRes;
+            } catch (retryErr) {}
+          }
+
+          if (!response.ok) {
+            if (response.status === 404 || response.status === 400 || response.status === 503 || response.status === 429) {
+              continue;
+            }
+            const errText = await response.text().catch(() => '');
+            throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let sseBuffer = '';
+          let streamEnded = false;
+          let localFullText = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            sseBuffer += decoder.decode(value, { stream: true });
+            const lines = sseBuffer.split('\n');
+            sseBuffer = lines.pop();
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data:')) continue;
+              const jsonStr = trimmed.replace(/^data:\s*/, '');
+              if (jsonStr === '[DONE]') {
+                streamEnded = true;
+                break;
+              }
+
+              const extracted = fastExtractSsePartText(jsonStr);
+              if (extracted.text) {
+                localFullText += extracted.text;
+                quickAnswerStreamText = localFullText;
+                scheduleStreamRender();
+              }
+
+              if (extracted.finishReason) {
+                streamEnded = true;
+                break;
+              }
+            }
+
+            if (streamEnded) {
+              try { await reader.cancel(); } catch (e) {}
+              break;
+            }
+          }
+
+          usedEndpoint = endpoint;
+          finalFullText = localFullText;
+          streamSuccess = true;
+          break;
+        } catch (streamErr) {
+          console.warn(`[Direct Stream] Endpoint "${endpoint}" failed:`, streamErr.message);
         }
       }
 
-      if (raceResult && raceResult.success) {
+      if (streamSuccess) {
         const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-        renderAnswerContent(raceResult.fullText, true);
+        renderAnswerContent(finalFullText, true);
         const status = document.getElementById('quickAnswerStatus');
         if (status) status.innerText = `ตอบเสร็จสิ้น (${durationSec}s)`;
 
@@ -471,8 +386,8 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName }) {
             modelId: selectedModel,
             categoryName: resolvedCategory,
             promptText: optimizedPrompt,
-            fullText: raceResult.fullText,
-            endpointUsed: raceResult.endpoint
+            fullText: finalFullText,
+            endpointUsed: usedEndpoint
           });
         }
         return;

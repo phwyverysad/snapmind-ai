@@ -2040,197 +2040,92 @@ function fastExtractSsePartText(jsonStr) {
   }
 }
 
-// Helper to execute a resilient Gemini SSE stream with Stalled-Worker Race (1.2s Timeout) and endpoint fallback
+// Helper to execute a resilient Gemini SSE stream with endpoint fallback
 async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayload, onChunk) {
   const fetchFn = (typeof net !== 'undefined' && net.fetch) ? net.fetch : fetch;
-  const STALL_TIMEOUT_MS = 1200;
+  let fullText = '';
   let lastError = null;
+  let usedEndpoint = null;
 
-  const runWorker = async (endpoint, signal, onFirstChunk) => {
+  for (let i = 0; i < (endpointCandidates ? endpointCandidates.length : 0); i++) {
+    const endpoint = endpointCandidates[i];
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
-    let response = await fetchFn(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload),
-      signal
-    });
-
-    // If endpoint rejects thinkingConfig with HTTP 400, retry once immediately without thinkingConfig
-    if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
-      try {
-        const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
-        delete fallbackPayload.generationConfig.thinkingConfig;
-        const retryRes = await fetchFn(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(fallbackPayload),
-          signal
-        });
-        if (retryRes.ok) response = retryRes;
-      } catch (retryErr) {}
-    }
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let sseBuffer = '';
-    let streamEnded = false;
-    let localFullText = '';
-    let isFirst = true;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      sseBuffer += decoder.decode(value, { stream: true });
-      const lines = sseBuffer.split('\n');
-      sseBuffer = lines.pop();
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data:')) continue;
-        const jsonStr = trimmed.replace(/^data:\s*/, '');
-        if (jsonStr === '[DONE]') {
-          streamEnded = true;
-          break;
-        }
-
-        const extracted = fastExtractSsePartText(jsonStr);
-        if (extracted.text) {
-          if (isFirst) {
-            isFirst = false;
-            if (onFirstChunk) onFirstChunk();
-          }
-          localFullText += extracted.text;
-          if (onChunk) onChunk(extracted.text, endpoint);
-        }
-
-        if (extracted.finishReason) {
-          streamEnded = true;
-          break;
-        }
-      }
-
-      if (streamEnded) {
-        try { await reader.cancel(); } catch (e) {}
-        break;
-      }
-    }
-
-    return { success: true, fullText: localFullText, endpoint };
-  };
-
-  // Stalled-Worker Race: if 2 or more candidate endpoints exist, race primary against backup if primary stalls > 1.2s
-  if (endpointCandidates && endpointCandidates.length > 1) {
-    let activeWinner = null;
-    const primaryController = new AbortController();
-    let backupController = null;
-    let stallTimer = null;
-    let primaryFirstTokenArrived = false;
 
     try {
-      const raceResult = await new Promise((resolve, reject) => {
-        let primaryDone = false;
-        let backupDone = false;
-        let primaryFailed = false;
-        let backupFailed = false;
-
-        const startBackup = () => {
-          if (activeWinner || backupController || primaryFirstTokenArrived) return;
-          console.log(`[Stalled-Worker Race] Primary "${endpointCandidates[0]}" took > ${STALL_TIMEOUT_MS}ms. Starting backup node "${endpointCandidates[1]}" in parallel...`);
-          backupController = new AbortController();
-          runWorker(endpointCandidates[1], backupController.signal, () => {
-            if (!activeWinner) {
-              activeWinner = 'backup';
-              console.log(`[Stalled-Worker Race] Backup node "${endpointCandidates[1]}" won the race! Aborting stalled primary worker.`);
-              try { primaryController.abort(); } catch (e) {}
-            }
-          })
-          .then(res => {
-            backupDone = true;
-            if (activeWinner === 'backup' || !activeWinner) {
-              activeWinner = 'backup';
-              try { primaryController.abort(); } catch (e) {}
-              resolve(res);
-            }
-          })
-          .catch(err => {
-            backupFailed = true;
-            lastError = err;
-            if (activeWinner === 'backup' || primaryDone || primaryFailed) {
-              reject(err);
-            }
-          });
-        };
-
-        stallTimer = setTimeout(() => {
-          startBackup();
-        }, STALL_TIMEOUT_MS);
-
-        runWorker(endpointCandidates[0], primaryController.signal, () => {
-          if (!activeWinner) {
-            activeWinner = 'primary';
-            primaryFirstTokenArrived = true;
-            if (stallTimer) {
-              clearTimeout(stallTimer);
-              stallTimer = null;
-            }
-            if (backupController) {
-              try { backupController.abort(); } catch (e) {}
-            }
-          }
-        })
-        .then(res => {
-          primaryDone = true;
-          if (stallTimer) clearTimeout(stallTimer);
-          if (activeWinner === 'primary' || !activeWinner) {
-            activeWinner = 'primary';
-            if (backupController) {
-              try { backupController.abort(); } catch (e) {}
-            }
-            resolve(res);
-          }
-        })
-        .catch(err => {
-          primaryFailed = true;
-          lastError = err;
-          if (stallTimer) {
-            clearTimeout(stallTimer);
-            stallTimer = null;
-          }
-          if (activeWinner === 'primary') {
-            reject(err);
-          } else if (!backupController) {
-            startBackup();
-          } else if (backupFailed) {
-            reject(err);
-          }
-        });
+      let response = await fetchFn(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload)
       });
 
-      return raceResult;
-    } catch (raceErr) {
-      console.warn('[Stalled-Worker Race] Race completed with error, attempting remaining fallback candidates:', raceErr.message);
-      lastError = raceErr;
-    } finally {
-      if (stallTimer) clearTimeout(stallTimer);
-    }
-  }
+      // If endpoint rejects thinkingConfig with HTTP 400, retry once immediately without thinkingConfig
+      if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
+        try {
+          const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
+          delete fallbackPayload.generationConfig.thinkingConfig;
+          const retryRes = await fetchFn(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackPayload)
+          });
+          if (retryRes.ok) {
+            response = retryRes;
+          }
+        } catch (retryErr) {}
+      }
 
-  // Fallback to remaining candidates sequentially
-  const startIndex = (endpointCandidates && endpointCandidates.length > 1) ? 2 : 0;
-  for (let i = startIndex; i < (endpointCandidates ? endpointCandidates.length : 0); i++) {
-    const endpoint = endpointCandidates[i];
-    try {
-      const fallbackController = new AbortController();
-      const res = await runWorker(endpoint, fallbackController.signal, null);
-      return res;
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 400 || response.status === 503 || response.status === 429) {
+          continue;
+        }
+        const errText = await response.text().catch(() => '');
+        throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let sseBuffer = '';
+      let streamEnded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop();
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.replace(/^data:\s*/, '');
+          if (jsonStr === '[DONE]') {
+            streamEnded = true;
+            break;
+          }
+
+          const extracted = fastExtractSsePartText(jsonStr);
+          if (extracted.text) {
+            fullText += extracted.text;
+            onChunk(extracted.text, endpoint);
+          }
+
+          if (extracted.finishReason) {
+            streamEnded = true;
+            break;
+          }
+        }
+
+        if (streamEnded) {
+          try { await reader.cancel(); } catch (e) {}
+          break;
+        }
+      }
+
+      usedEndpoint = endpoint;
+      return { success: true, fullText, endpoint: usedEndpoint };
     } catch (streamErr) {
-      console.warn(`[Gemini Stream Error] Fallback Endpoint "${endpoint}":`, streamErr.message);
+      console.warn(`[Gemini Stream Error] Endpoint "${endpoint}":`, streamErr.message);
       lastError = streamErr;
     }
   }
