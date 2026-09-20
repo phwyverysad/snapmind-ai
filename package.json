@@ -1,0 +1,147 @@
+{
+  "name": "snapmind-ai",
+  "productName": "SnapMind AI",
+  "version": "1.0.0",
+  "description": "SnapMind AI - Electron AI Screen Scanner powered by Google AI Studio Gemini API",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 -c.win.target=nsis-web",
+    "dist:offline": "electron-builder --win --x64 -c.win.target=nsis"
+  },
+  "build": {
+    "appId": "com.snapmind.ai",
+    "productName": "SnapMind AI",
+    "compression": "maximum",
+    "afterPack": "./clean-unpacked.js",
+    "electronLanguages": [
+      "th",
+      "en",
+      "en-US"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "script.js",
+      "style.css",
+      "index.html",
+      "toolbar.html",
+      "toolbar.js",
+      "gemini_tools.js",
+      "textCapture.js",
+      "nativeBridge.js",
+      "SnapMind.ico",
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/*.markdown",
+      "!**/*.d.ts",
+      "!**/*.ts",
+      "!**/LICENSE*",
+      "!**/README*",
+      "!**/CHANGELOG*",
+      "!**/doc/**",
+      "!**/docs/**",
+      "!**/examples/**",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/test*/**",
+      "!test_*.js",
+      "!run_all_tests.js",
+      "!*.cpp",
+      "!*.obj",
+      "!*.exp",
+      "!*.lib",
+      "!*.cs",
+      "!*.exe",
+      "!เครื่องมือ.txt"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "phwyverysad",
+      "repo": "snapmind-ai"
+    },
+    "extraResources": [
+      "GeminiTextCopy.dll",
+      "hotkey_hook.dll",
+      "SnapMind.ico"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "nsis-web",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "SnapMind.ico",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "SnapMind-AI-Portable.exe",
+      "requestExecutionLevel": "user"
+    },
+    "nsisWeb": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "SnapMind AI",
+      "installerIcon": "SnapMind.ico",
+      "uninstallerIcon": "SnapMind.ico",
+      "uninstallDisplayName": "SnapMind AI",
+      "artifactName": "SnapMind_AI_WebSetup.exe",
+      "appPackageUrl": "https://github.com/phwyverysad/snapmind-ai/releases/download/v1.0.0"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "SnapMind AI",
+      "installerIcon": "SnapMind.ico",
+      "uninstallerIcon": "SnapMind.ico",
+      "uninstallDisplayName": "SnapMind AI",
+      "artifactName": "SnapMind_AI_Setup_Full.exe",
+      "differentialPackage": false
+    }
+  },
+  "keywords": [
+    "electron",
+    "gemini",
+    "ai",
+    "ocr",
+    "screen-scanner"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "@google/genai": "^2.23.0",
+    "koffi": "^3.3.1"
+  }
+}

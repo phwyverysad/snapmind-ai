@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapMind AI - Multimodal Assistant</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@500;600;700&family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- KaTeX CSS for LaTeX Math Formatting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  
+  <!-- Modular App Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Marked JS for Markdown Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- DOMPurify for HTML XSS Sanitization -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <!-- KaTeX JS & Auto-render extension for Math Formulas -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+
+  <!-- Fullscreen Interactive Canvas Overlay for Multi-Monitor Snipping -->
+  <canvas id="scanCanvas"></canvas>
+
+  <!-- Top Snipping Hint Overlay Bar (Removed per user request) -->
+  <div class="top-hint" id="topHint" style="display: none !important;"></div>
+
+  <!-- Live Status & Percent Badge (Removed per user request) -->
+  <div class="percent-badge-under" id="percentBadge" style="display: none !important;"></div>
+
+  <!-- QUICK TEXT FLOATING TOOLBAR & ANSWER CONTAINER -->
+  <div class="quick-text-container" id="quickTextContainer" style="display: none;">
+    <!-- Floating Action Toolbar (Gemini Single Sleek Horizontal Pill) -->
+    <div class="quick-text-toolbar" id="quickTextToolbar">
+      <!-- 1. Drag Handle: 6 small dots in 2 vertical columns (⋮⋮) -->
+      <div class="drag-handle" title="ลากเพื่อย้ายตำแหน่ง">
+        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+          <circle cx="2.5" cy="2.5" r="1.2"/>
+          <circle cx="7.5" cy="2.5" r="1.2"/>
+          <circle cx="2.5" cy="7" r="1.2"/>
+          <circle cx="7.5" cy="7" r="1.2"/>
+          <circle cx="2.5" cy="11.5" r="1.2"/>
+          <circle cx="7.5" cy="11.5" r="1.2"/>
+        </svg>
+      </div>
+
+      <!-- 2. Action Cards: 1-9 dynamic prompt options -->
+      <div class="quick-actions-list" id="quickActionsList">
+        <!-- Dynamic prompt buttons populated by script.js with inline SVGs and number badges 1-9 -->
+      </div>
+
+      <!-- 3. Custom Ask Button: ? ถามเอง -->
+      <button class="quick-action-btn custom-ask-btn" id="quickCustomToggleBtn" type="button" title="พิมพ์คำถามเอง [?]" onclick="toggleQuickCustomInput()">
+        <span class="quick-action-num">?</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span class="quick-action-label">ถามเอง</span>
+      </button>
+
+      <!-- 4. Cancel Button: Esc ยกเลิก -->
+      <button class="quick-action-btn cancel-btn" id="quickCancelBtn" type="button" title="ปิดแถบเครื่องมือ [Esc]" onclick="closeQuickTextUI()">
+        <span class="quick-action-num esc-badge">Esc</span>
+        <span class="quick-action-label">ยกเลิก</span>
+      </button>
+    </div>
+
+    <!-- Custom Query Input (Expanded on toggle) -->
+    <div class="quick-custom-box" id="quickCustomBox" style="display: none;">
+      <input type="text" class="quick-custom-input" id="quickCustomInput" placeholder="พิมพ์คำสั่งหรือคำถามสำหรับข้อความนี้..." onkeydown="handleQuickCustomKeyDown(event)">
+      <button class="quick-custom-send" onclick="submitQuickCustomAsk()" title="ส่งคำถาม">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Selected Text Snippet Preview -->
+    <div class="quick-snippet-preview" id="quickSnippetPreview" style="display: none;">
+      <span class="snippet-label">ข้อความ:</span>
+      <span class="snippet-text" id="quickSnippetText"></span>
+    </div>
+
+    <!-- Sleek Floating Answer Card -->
+    <div class="quick-answer-card" id="quickAnswerCard" style="display: none;">
+      <div class="quick-answer-header">
+        <div class="quick-answer-title-group">
+          <span class="quick-action-badge" id="quickAnswerActionBadge">สรุปสั้น</span>
+          <span class="quick-status-text" id="quickAnswerStatus">กำลังประมวลผล...</span>
+        </div>
+        <div class="quick-answer-actions">
+          <button class="quick-card-btn" title="คัดลอกคำตอบ" onclick="copyQuickAnswer()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <span id="quickCopyLabel">คัดลอก</span>
+          </button>
+          <button class="quick-card-btn close" title="ปิด (Esc)" onclick="closeQuickTextUI()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="quick-answer-body" id="quickAnswerBody">
+        <!-- Markdown content streamed live -->
+      </div>
+    </div>
+  </div>
+
+  <!-- AI FLOATING RESPONSE & CHAT WINDOW -->
+  <div class="ai-response-window" id="aiWindow">
+    
+    <!-- Window Toolbar Header -->
+    <div class="ai-toolbar" id="aiToolbar">
+      <div class="toolbar-left">
+        <!-- Prominent Window Drag Handle (Hidden as requested) -->
+        <div class="window-drag-handle" title="คลิกค้างแล้วลากเพื่อย้ายหน้าต่าง" style="display: none !important;">
+          <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor">
+            <circle cx="3" cy="3" r="1.5"/>
+            <circle cx="9" cy="3" r="1.5"/>
+            <circle cx="3" cy="8" r="1.5"/>
+            <circle cx="9" cy="8" r="1.5"/>
+            <circle cx="3" cy="13" r="1.5"/>
+            <circle cx="9" cy="13" r="1.5"/>
+          </svg>
+        </div>
+        <!-- AI Model Dropdown (19 Ordered Models) -->
+        <div class="custom-model-dropdown" id="modelDropdown">
+          <button class="model-dropdown-trigger" type="button" id="modelDropdownTrigger" onclick="toggleModelDropdown(event)">
+            <span class="model-label-text">Model: <strong id="triggerModelName">Gemini 3.8 Flash</strong></span>
+            <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          <div class="model-dropdown-menu" id="modelDropdownMenu">
+            <!-- 19 Models populated dynamically by script.js -->
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <button class="tool-icon-btn" title="ประวัติการสแกน (History)" onclick="openHistoryModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </button>
+        <button class="tool-icon-btn" title="การตั้งค่า (Settings)" onclick="openSettingsModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="tool-icon-btn close" title="ปิดย่อลง System Tray" onclick="closeAiWindow()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Thinking Glow Pulse & Performance Metrics Header -->
+    <div class="metrics-banner" id="metricsBanner" onselectstart="return false;">
+      <div class="thinking-glow-bar" id="thinkingGlowBar"></div>
+      <div class="metrics-content" onselectstart="return false;">
+        <span class="latency-time" id="latencyTimer" draggable="false" onselectstart="return false;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span id="latencyText" onselectstart="return false;">พร้อมใช้งาน</span></span>
+      </div>
+    </div>
+
+    <!-- AI Thinking Process Collapsible Accordion -->
+    <details class="thinking-accordion" id="thinkingAccordion" style="display: none;">
+      <summary class="accordion-summary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>กระบวนการคิดและวิเคราะห์ (Thinking Process)</span>
+      </summary>
+      <div class="accordion-content" id="thinkingContent"></div>
+    </details>
+
+    <!-- Category Navigation Tabs -->
+    <div class="category-tabs" onselectstart="return false;">
+      <button class="tab-btn active" draggable="false" onclick="switchCategory('answer', this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>คำตอบ</span>
+      </button>
+      <button class="tab-btn" draggable="false" onclick="switchCategory('explain', this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>อธิบาย</span>
+      </button>
+      <button class="tab-btn" draggable="false" onclick="switchCategory('summary', this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>สรุป</span>
+      </button>
+      <button class="tab-btn" draggable="false" onclick="switchCategory('translate', this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span>แปลภาษา</span>
+      </button>
+      <button class="tab-btn" draggable="false" onclick="switchCategory('ocr', this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>ข้อความ OCR</span>
+      </button>
+    </div>
+
+    <!-- Chat Thread Area -->
+    <div class="chat-thread" id="chatThread">
+      <!-- AI & User Chat Bubbles inserted dynamically -->
+    </div>
+
+    <!-- Follow-up Chat Input Bar -->
+    <div class="chat-input-bar">
+      <input type="text" class="chat-input-field" id="chatInput" placeholder="ถามคำถามเพิ่มเติมเกี่ยวกับภาพหรือข้อความนี้..." onkeydown="handleChatKeyDown(event)">
+      <button class="send-btn" title="ส่งคำถาม" onclick="sendUserMessage()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL DIALOG (Wide Horizontal Rectangle - Modern Pure White Layout) -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>ตั้งค่าระบบ (Settings)</span>
+        </h2>
+        <button class="modal-close-btn" onclick="closeSettingsModal()" title="ปิด">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- LEFT COLUMN: Core Configuration -->
+        <div class="settings-col-left">
+          <!-- FREE TIER GUARANTEE BANNER (Zero Emojis, Pure SVG) -->
+          <div class="settings-free-badge">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>ใช้งานฟรี ไม่ต้องผูกบัตรเครดิต</span>
+          </div>
+
+          <!-- API KEY INPUT -->
+          <div class="form-group">
+            <label for="apiKeyInput" style="display:flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+              <span>Gemini API Key</span>
+            </label>
+            <input type="password" id="apiKeyInput" class="form-input" placeholder="วาง API Key ที่นี่...">
+            <small class="form-hint">รับ API Key ฟรีที่ <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#0284c7; font-weight:600;">Google AI Studio ↗</a></small>
+          </div>
+
+          <!-- SHORTCUTS GRID -->
+          <div class="settings-grid-2col">
+            <div class="form-group">
+              <label for="shortcutInput">คีย์ลัดสแกนหน้าจอ</label>
+              <input type="text" id="shortcutInput" class="form-input" placeholder="เช่น Alt+Shift+S">
+              <small class="form-hint">เช่น <code>Alt+Shift+S</code></small>
+            </div>
+
+            <div class="form-group">
+              <label for="quickTextShortcutInput">คีย์ลัดคลุมข้อความ</label>
+              <input type="text" id="quickTextShortcutInput" class="form-input" placeholder="Ctrl+CapsLock" value="Ctrl+CapsLock">
+              <small class="form-hint">คลุมข้อความแล้วกดคีย์ลัด</small>
+            </div>
+          </div>
+
+          <!-- AUTO-LAUNCH ON STARTUP SETTING -->
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="auto-launch-card" for="autoLaunchCheckbox" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; user-select: none;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                <div>
+                  <div style="font-size: 0.84rem; font-weight: 600; color: #0f172a;">เริ่มต้นอัตโนมัติเมื่อเปิด Windows</div>
+                  <div style="font-size: 0.74rem; color: #64748b;">เปิดโปรแกรมในพื้นหลังทันทีเมื่อเข้าสู่ระบบ</div>
+                </div>
+              </div>
+              <input type="checkbox" id="autoLaunchCheckbox" style="width: 16px; height: 16px; accent-color: #0284c7; cursor: pointer;">
+            </label>
+          </div>
+
+          <!-- DEFAULT MODEL SELECTION -->
+          <div class="form-group">
+            <label style="display:flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span>โมเดลเริ่มต้น (Default AI Model)</span>
+            </label>
+            <div class="custom-modal-dropdown" id="modalModelDropdown">
+              <button class="modal-dropdown-trigger" type="button" id="modalModelTrigger" onclick="toggleModalModelDropdown(event)">
+                <span id="modalSelectedModelName">Gemini 3.8 Flash</span>
+                <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+              <div class="modal-dropdown-menu" id="modalModelDropdownMenu">
+                <!-- Options populated dynamically by script.js -->
+              </div>
+            </div>
+          </div>
+
+          <!-- GEMINI TOOLS TOGGLE SECTION -->
+          <div class="form-group">
+            <label style="margin-bottom: 4px; font-size: 0.83rem; font-weight: 600; display:flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>เครื่องมือเสริม AI (Gemini Tools)</span>
+            </label>
+            <div class="tools-grid">
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolGoogleSearch" checked>
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Google Search
+                  </span>
+                  <span class="tool-desc">ค้นหาข้อมูลเว็บแบบสด</span>
+                </div>
+              </label>
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolCodeExecution" checked>
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    Code Execution
+                  </span>
+                  <span class="tool-desc">คำนวณและประมวลผลโค้ด</span>
+                </div>
+              </label>
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolUrlContext" checked>
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    URL Context
+                  </span>
+                  <span class="tool-desc">อ่านเนื้อหาจากลิงก์เว็บ</span>
+                </div>
+              </label>
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolGoogleMaps" checked>
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    Google Maps
+                  </span>
+                  <span class="tool-desc">ค้นหาสถานที่และแผนที่</span>
+                </div>
+              </label>
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolFileSearch">
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    File Search (RAG)
+                  </span>
+                  <span class="tool-desc">ค้นหาข้อมูลในเอกสาร</span>
+                </div>
+              </label>
+              <label class="tool-checkbox-card">
+                <input type="checkbox" id="toolFunctionCalling" checked>
+                <div class="tool-card-body">
+                  <span class="tool-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Function Calling
+                  </span>
+                  <span class="tool-desc">สภาพอากาศและสร้างกราฟ</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Thinking Mode & Quick Prompts Management -->
+        <div class="settings-col-right">
+          <!-- MODEL THINKING CONFIG SECTION -->
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <label style="margin:0; font-size: 0.83rem; font-weight: 600; display:flex; align-items:center; gap:6px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#0284c7;">
+                  <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"></path>
+                  <path d="M9 21h6"></path>
+                </svg>
+                <span>โหมดความคิด (Thinking Mode แยกตามโมเดล)</span>
+              </label>
+              <span style="font-size:0.7rem; color:#64748b;">ปิด = ตอบเร็วกว่าเดิม / เปิด = คิดวิเคราะห์เชิงลึก</span>
+            </div>
+            <div class="thinking-model-list" id="thinkingModelList">
+              <!-- Dynamic model thinking cards populated by script.js -->
+            </div>
+          </div>
+
+          <!-- CUSTOM PROMPTS MANAGEMENT SECTION -->
+          <div class="form-group" style="margin-top: 6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <label style="margin:0; font-size: 0.83rem; font-weight: 600; display:flex; align-items:center; gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>คำสั่งด่วน (Quick Prompts)</span>
+              </label>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openPromptEditorModal()" style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; font-size:0.75rem;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>เพิ่มคำสั่ง</span>
+              </button>
+            </div>
+            <div class="prompts-manager-list" id="promptsManagerList">
+              <!-- Dynamic prompt items populated by script.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveSettingsFromModal()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMPT ADD/EDIT MODAL (Redesigned: Prompt Only, Auto-Attached {text}) -->
+  <div class="modal-overlay" id="promptEditorModal" style="display:none; z-index: 350;">
+    <div class="modal-card prompt-editor-card">
+      <div class="modal-header">
+        <h3 id="promptEditorTitle" style="font-size: 0.95rem; font-weight: 600; display:flex; align-items:center; gap:6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>เพิ่ม/แก้ไขคำสั่ง AI</span>
+        </h3>
+        <button class="modal-close-btn" onclick="closePromptEditorModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editPromptId">
+        
+        <!-- Field 1: Command Name -->
+        <div class="form-group">
+          <label for="promptNameInput">ชื่อคำสั่ง (แสดงบนปุ่ม)</label>
+          <input type="text" id="promptNameInput" class="form-input" placeholder="เช่น สรุปสั้น, แปลไทย, ตรวจไวยากรณ์">
+        </div>
+
+        <!-- Field 2: SVG Icon Picker -->
+        <div class="form-group">
+          <label>ไอคอนคำสั่ง (SVG Icon)</label>
+          <div class="icon-picker-grid" id="iconPickerGrid">
+            <!-- 10 Preset SVG icon buttons populated by script.js -->
+          </div>
+        </div>
+
+        <!-- Field 3: Pure Prompt Instruction (No {text} required!) -->
+        <div class="form-group">
+          <div class="prompt-label-row">
+            <label for="promptInstructionInput">คำสั่งพร้อมต์ที่ต้องการ (Prompt)</label>
+            <span class="prompt-hint-pill">พิมพ์เฉพาะคำสั่งที่ต้องการ</span>
+          </div>
+          <textarea id="promptInstructionInput" class="form-textarea prompt-custom-area" rows="3" placeholder="เช่น แปลข้อความต่อไปนี้เป็นภาษาไทยอ่านง่ายเข้าใจได้ง่าย" oninput="handlePromptInstructionChange()"></textarea>
+          <!-- Hidden template input for backward compatibility -->
+          <textarea id="promptTemplateInput" style="display: none;"></textarea>
+
+          <!-- Separated Attached {text} Banner -->
+          <div class="prompt-text-injection-card">
+            <div class="prompt-injection-header">
+              <div class="prompt-injection-tag">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>ข้อความที่คุณคลุมดำ / คัดลอกไว้</span>
+              </div>
+              <span class="prompt-auto-badge">รวมให้อัตโนมัติ ⚡</span>
+            </div>
+            <div class="prompt-injection-desc">
+              ระบบจะนำข้อความที่เลือกส่งต่อท้ายคำสั่งให้อัตโนมัติ <strong>ไม่ต้องพิมพ์ {text} อีกต่อไป</strong>
+            </div>
+          </div>
+
+          <!-- Live Interactive Preview Box -->
+          <div class="prompt-preview-container">
+            <div class="prompt-preview-header">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>ตัวอย่างคำสั่งจริงที่จะส่งให้ AI:</span>
+            </div>
+            <div class="prompt-preview-code" id="promptLivePreview"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closePromptEditorModal()">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="savePromptFromEditor()">บันทึกคำสั่ง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY MODAL DIALOG -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal-card history-card">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>ประวัติการสแกนย้อนหลัง (History Log)</span>
+        </h2>
+        <div>
+          <button class="btn btn-secondary btn-sm" onclick="clearHistoryAll()" style="margin-right: 8px;">ล้างประวัติทั้งหมด</button>
+          <button class="modal-close-btn" onclick="closeHistoryModal()">✕</button>
+        </div>
+      </div>
+      <div class="modal-body history-body" id="historyList">
+        <!-- History items inserted dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Main Script -->
+  <script src="script.js"></script>
+</body>
+</html>
