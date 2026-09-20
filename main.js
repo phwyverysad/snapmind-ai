@@ -2133,7 +2133,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
   throw (lastError || new Error('Stream failed on all endpoints'));
 }
 
-// Secure Main Process Gemini Vision Streaming API Handler (Dual Concurrent Streams: Analysis + OCR)
+// Secure Main Process Gemini Vision Streaming API Handler (Unified High-Speed Stream)
 ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, modelId }) => {
   const apiKey = (currentConfig && currentConfig.apiKey) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
@@ -2147,8 +2147,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
   const startTime = Date.now();
   const thinkingConf = getThinkingConfigForModel(modelId);
 
-  // Prompt 1: High-Speed Structured Analysis
-  const analysisPromptText = `วิเคราะห์ภาพหน้าจอและตอบให้สั้นกระชับ ตรงประเด็นที่สุด ครบทุกหัวข้อตามรูปแบบนี้:
+  const unifiedPromptText = `วิเคราะห์ภาพหน้าจอและตอบให้สั้นกระชับ ชัดเจน ครบทุกหัวข้อตามรูปแบบนี้:
 
 ### [ANSWER]
 (คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นทันที หากมีสูตรคณิตศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$)
@@ -2157,90 +2156,53 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
 (คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าให้อ่านง่าย)
 
 ### [SUMMARY]
-(สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points - ... 1-3 ข้อ)
+(สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points 1-3 ข้อ)
 
 ### [TRANSLATE]
 (แปลเนื้อหาภาษาต่างประเทศทั้งหมดในภาพออกมาเป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำภาษาอังกฤษมาแสดงซ้ำ แปลตรงตัว 100% คงโครงสร้างการจัดวางเดิมไว้)
+
+### [OCR]
+(ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ในภาพต้นฉบับออกมาเป๊ะๆ 100% ตามภาษาเดิม คงระยะบรรทัดและตาราง หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)")
 `;
 
-  // Prompt 2: High-Speed Direct Concurrent OCR & Layout Analysis (Runs in parallel with analysis from t=0!)
-  const ocrPromptText = `ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ในภาพต้นฉบับออกมาเป๊ะๆ 100% ตามภาษาเดิม:
-1. คงระยะการขึ้นบรรทัดใหม่ การเว้นวรรค และย่อหน้าตามภาพต้นฉบับ
-2. หากมีตารางให้จัดเป็น Markdown Table (| ... |) ให้ตรงแถวและคอลัมน์
-3. หากมีหัวข้อให้ใส่ระดับหัวข้อ Markdown (#, ##, **ตัวหนา**)
-4. หากมีโค้ดคอมพิวเตอร์ให้ใส่ใน Code Block (\`\`\`...\`\`\`)
-5. ห้ามแปล ห้ามสรุป ห้ามใส่คำทักทาย หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)"`;
-
-  const analysisPayload = {
+  const payload = {
     contents: [
       {
         parts: [
-          { text: analysisPromptText },
+          { text: unifiedPromptText },
           { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
         ]
       }
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 1600,
       ...thinkingConf
-    }
-  };
-
-  const isFlashLite = modelId && modelId.includes('flash-lite');
-  const ocrThinkingConf = isFlashLite ? {} : { thinkingConfig: { thinkingBudget: 0 } };
-
-  const ocrPayload = {
-    contents: [
-      {
-        parts: [
-          { text: ocrPromptText },
-          { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.0,
-      maxOutputTokens: 1536,
-      ...ocrThinkingConf
     }
   };
 
   let usedEndpoint = modelId;
 
-  // Stream Analysis and OCR in parallel concurrently
-  const analysisPromise = executeSingleGeminiStream(apiKey, endpointsToTry, analysisPayload, (partText, ep) => {
-    usedEndpoint = ep;
-    if (event.sender && !event.sender.isDestroyed()) {
-      event.sender.send('gemini-stream-chunk', {
-        chunk: partText,
-        type: 'analysis',
-        endpointUsed: ep
-      });
+  try {
+    const streamRes = await executeSingleGeminiStream(apiKey, endpointsToTry, payload, (partText, ep) => {
+      usedEndpoint = ep;
+      if (event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('gemini-stream-chunk', {
+          chunk: partText,
+          type: 'analysis',
+          endpointUsed: ep
+        });
+      }
+    });
+
+    const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
+    const fullText = streamRes.fullText || '';
+
+    let ocrText = '';
+    const ocrMatch = fullText.match(/###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?[\r\n]+([\s\S]*)$/i);
+    if (ocrMatch && ocrMatch[1]) {
+      ocrText = ocrMatch[1].trim();
     }
-  });
-
-  const ocrPromise = executeSingleGeminiStream(apiKey, endpointsToTry, ocrPayload, (partText, ep) => {
-    usedEndpoint = ep;
-    if (event.sender && !event.sender.isDestroyed()) {
-      event.sender.send('gemini-stream-chunk', {
-        chunk: partText,
-        type: 'ocr',
-        endpointUsed: ep
-      });
-    }
-  }).catch(ocrErr => {
-    console.warn('[Parallel OCR Stream Warning]', ocrErr.message);
-    return { success: false, fullText: '' };
-  });
-
-  const [analysisRes, ocrRes] = await Promise.allSettled([analysisPromise, ocrPromise]);
-
-  const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-
-  if (analysisRes.status === 'fulfilled') {
-    const fullText = analysisRes.value.fullText;
-    const ocrText = ocrRes.status === 'fulfilled' ? ocrRes.value.fullText : '';
 
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('gemini-stream-finish', {
@@ -2258,8 +2220,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
       durationSec,
       endpointUsed: usedEndpoint
     };
-  } else {
-    const lastError = analysisRes.reason;
+  } catch (lastError) {
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('gemini-stream-error', {
         error: lastError?.message || 'ไม่สามารถสตรีมข้อมูลจาก Gemini API ได้'

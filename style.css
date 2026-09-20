@@ -360,29 +360,39 @@ body.snipping-active #quickTextContainer {
 .category-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px 0 10px;
+  gap: 2px;
+  padding: 4px 8px 0 8px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
-  overflow-x: auto;
+  overflow: hidden !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
   user-select: none !important;
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
 }
 
+.category-tabs::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 .tab-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  flex: 1;
+  gap: 4px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   color: #64748b;
-  padding: 8px 12px;
+  padding: 7px 6px;
   border-radius: 6px 6px 0 0;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;

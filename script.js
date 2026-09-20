@@ -325,11 +325,16 @@ async function reanalyzeWithNewModel() {
 
   const streamStartTime = performance.now();
   const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
+  let hasAnswerCompleted = false;
 
   window.electronAPI.onStreamChunk((data) => {
     if (thisRequestId !== currentAnalysisRequestId) return;
     if (data.type === 'ocr') {
       currentAnalysisResult.ocr = (currentAnalysisResult.ocr || '') + data.chunk;
+      hasReceivedFirstToken = true;
+      if (activeCategory === 'ocr') {
+        scheduleScreenStreamRender();
+      }
     } else {
       accumulatedStreamText += data.chunk;
       const parsed = parseStreamSections(accumulatedStreamText);
@@ -343,6 +348,22 @@ async function reanalyzeWithNewModel() {
       if (parsed.thinking_process) {
         currentAnalysisResult.thinking_process = parsed.thinking_process;
       }
+      hasReceivedFirstToken = true;
+
+      const hasReachedNextSection = accumulatedStreamText.search(/###?\s*\[?(?:EXPLAIN|EXPLANATION|คำอธิบาย|SUMMARY|สรุป|TRANSLATE|แปล|OCR|TEXT|ถอดข้อความ)\]?/i) !== -1;
+
+      if (!hasAnswerCompleted && (hasReachedNextSection || (currentAnalysisResult.answer && currentAnalysisResult.answer.length > 20 && (currentAnalysisResult.explain || currentAnalysisResult.summary || currentAnalysisResult.translate)))) {
+        hasAnswerCompleted = true;
+        metricsBanner.classList.remove('thinking');
+        const answerLatencySec = ((performance.now() - streamStartTime) / 1000).toFixed(2);
+        if (latencyText) {
+          latencyText.innerText = `${answerLatencySec}s (${new Date().toLocaleTimeString('th-TH')})`;
+        }
+        const actionsEl = document.getElementById('liveStreamingActions');
+        if (actionsEl) actionsEl.style.display = 'flex';
+      }
+
+      scheduleScreenStreamRender();
     }
   });
 
@@ -352,15 +373,18 @@ async function reanalyzeWithNewModel() {
     metricsBanner.classList.remove('thinking');
     const duration = data.durationSec || ((performance.now() - streamStartTime) / 1000).toFixed(2);
     if (latencyText) {
-      latencyText.innerText = `${duration}s (${new Date().toLocaleTimeString('th-TH')})`;
+      if (!hasAnswerCompleted || !latencyText.innerText || latencyText.innerText.includes('กำลัง')) {
+        latencyText.innerText = `${duration}s (${new Date().toLocaleTimeString('th-TH')})`;
+      }
     }
+    hasAnswerCompleted = true;
 
     if (data.ocrText && (!currentAnalysisResult.ocr || !currentAnalysisResult.ocr.trim())) {
       currentAnalysisResult.ocr = data.ocrText;
     }
     currentDisplayModelName = selectedModelNameText();
 
-    // Deliver all answers and categories simultaneously!
+    // Render full conversation view with LaTeX math and copy buttons
     renderConversationView();
 
     const actionsEl = document.getElementById('liveStreamingActions');
@@ -1015,6 +1039,15 @@ function getCategoryContent(cat, result) {
 }
 
 let hasReceivedFirstToken = false;
+let screenStreamRenderRaf = null;
+
+function scheduleScreenStreamRender() {
+  if (screenStreamRenderRaf) return;
+  screenStreamRenderRaf = requestAnimationFrame(() => {
+    screenStreamRenderRaf = null;
+    renderStreamingContent();
+  });
+}
 
 function renderStreamingContent() {
   const target = document.getElementById('liveStreamingContent');
@@ -1179,20 +1212,10 @@ async function processScreenCapture(cropBox) {
           thinkingAccordion.style.display = 'block';
         }
 
-        // Deliver all answers and categories simultaneously when all main sections are ready!
-        const hasAllCategories = Boolean(
-          currentAnalysisResult.answer && (
-            currentAnalysisResult.explain || 
-            currentAnalysisResult.summary || 
-            currentAnalysisResult.translate ||
-            accumulatedStreamText.search(/###?\s*\[?(?:EXPLAIN|SUMMARY|TRANSLATE)\]?/i) !== -1
-          ) && (
-            accumulatedStreamText.search(/###?\s*\[?(?:TRANSLATE|คำแปล|แปลไทย|แปลภาษา|แปล)\]?/i) !== -1 ||
-            currentAnalysisResult.translate
-          )
-        );
+        // Deliver answer latency and actions immediately as soon as [ANSWER] section is complete or next section begins!
+        const hasReachedNextSection = accumulatedStreamText.search(/###?\s*\[?(?:EXPLAIN|EXPLANATION|คำอธิบาย|SUMMARY|สรุป|TRANSLATE|แปล|OCR|TEXT|ถอดข้อความ)\]?/i) !== -1;
 
-        if (!hasAnswerCompleted && hasAllCategories) {
+        if (!hasAnswerCompleted && (hasReachedNextSection || (currentAnalysisResult.answer && currentAnalysisResult.answer.length > 20 && (currentAnalysisResult.explain || currentAnalysisResult.summary || currentAnalysisResult.translate)))) {
           hasAnswerCompleted = true;
           metricsBanner.classList.remove('thinking');
           const answerLatencySec = ((performance.now() - streamStartTime) / 1000).toFixed(2);
@@ -1201,12 +1224,10 @@ async function processScreenCapture(cropBox) {
           }
           const actionsEl = document.getElementById('liveStreamingActions');
           if (actionsEl) actionsEl.style.display = 'flex';
-
-          // Deliver all answers and categories simultaneously!
-          renderConversationView();
-        } else if (hasAnswerCompleted) {
-          renderConversationView();
         }
+
+        // Smooth live progressive rendering of the active category
+        scheduleScreenStreamRender();
       }
     });
 
