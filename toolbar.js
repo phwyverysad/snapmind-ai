@@ -426,24 +426,38 @@ function formatQuickTextMarkdown(rawText) {
   return rawText;
 }
 
+let lastFullParseTime = 0;
+let lastRenderedText = '';
+
 function renderAnswerContent(text, isFinal = false) {
   const body = document.getElementById('quickAnswerBody');
   if (!body) return;
 
   const formattedText = formatQuickTextMarkdown(text);
+  if (!isFinal && formattedText === lastRenderedText) return;
+  lastRenderedText = formattedText;
 
-  if (typeof marked !== 'undefined') {
+  const now = Date.now();
+
+  // Fast-track streaming render: throttle full marked.parse and DOMPurify to every 50ms during active streaming
+  // or on paragraph/line breaks, eliminating DOM tree rebuild overhead on every single frame.
+  const shouldFullParse = isFinal || (now - lastFullParseTime >= 50) || formattedText.endsWith('\n');
+
+  if (shouldFullParse && typeof marked !== 'undefined') {
+    lastFullParseTime = now;
     let html = marked.parse(formattedText || '');
     if (typeof DOMPurify !== 'undefined') {
       html = DOMPurify.sanitize(html);
     }
     body.innerHTML = html;
+  } else if (!shouldFullParse) {
+    // Skip redundant full AST re-parse on micro-interim frames
+    return;
   } else {
     body.innerText = formattedText || '';
   }
 
   // Throttled and conditional KaTeX math rendering: skips expensive DOM walking unless math symbols are present
-  const now = Date.now();
   const hasMath = formattedText && (formattedText.includes('$') || formattedText.includes('\\(') || formattedText.includes('\\['));
   if (typeof renderMathInElement === 'function' && hasMath && (isFinal || now - lastMathRenderTime > 250)) {
     lastMathRenderTime = now;

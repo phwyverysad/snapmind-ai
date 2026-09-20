@@ -1860,8 +1860,8 @@ ipcMain.handle('crop-area', async (event, rect) => {
       processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
     }
 
-    // Compress image to JPEG (Quality 78) for lightweight ~60-120KB payload with sharp OCR clarity
-    const jpegBuffer = processedImg.toJPEG(78);
+    // Compress image to JPEG (Quality 72) for ultra-lightweight ~40-75KB payload with sharp OCR clarity
+    const jpegBuffer = processedImg.toJPEG(72);
     return `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
   }
 
@@ -1921,6 +1921,51 @@ ipcMain.handle('gemini-analyze-screen', async (event, { base64Image, modelId }) 
     endpointUsed: result.endpointUsed
   };
 });
+
+// High-performance SSE Text Token Micro-Parser: extracts "text": "..." without heavy JSON.parse() of full 1.5KB payload
+function fastExtractSsePartText(jsonStr) {
+  const marker = '"text": "';
+  const startIdx = jsonStr.indexOf(marker);
+  if (startIdx !== -1) {
+    const valStart = startIdx + marker.length;
+    let endIdx = valStart;
+    let isEscaped = false;
+    while (endIdx < jsonStr.length) {
+      const c = jsonStr.charCodeAt(endIdx);
+      if (c === 92) { // '\\'
+        isEscaped = !isEscaped;
+      } else if (c === 34 && !isEscaped) { // '"'
+        break;
+      } else {
+        isEscaped = false;
+      }
+      endIdx++;
+    }
+    if (endIdx < jsonStr.length) {
+      const rawText = jsonStr.substring(valStart, endIdx);
+      let text = rawText;
+      if (rawText.includes('\\')) {
+        try {
+          text = JSON.parse('"' + rawText + '"');
+        } catch (e) {}
+      }
+      const finishReason = jsonStr.includes('"finishReason"') ? 'STOP' : null;
+      return { text, finishReason };
+    }
+  }
+
+  // Safe fallback to full JSON.parse
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const candidate = parsed.candidates?.[0];
+    return {
+      text: candidate?.content?.parts?.[0]?.text || '',
+      finishReason: candidate?.finishReason || null
+    };
+  } catch (e) {
+    return { text: '', finishReason: null };
+  }
+}
 
 // Helper to execute a single resilient Gemini SSE stream with fallback
 async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayload, onChunk) {
@@ -1986,22 +2031,16 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
             break;
           }
 
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const candidate = parsed.candidates?.[0];
-            const partText = candidate?.content?.parts?.[0]?.text || '';
-            const finishReason = candidate?.finishReason;
+          const extracted = fastExtractSsePartText(jsonStr);
+          if (extracted.text) {
+            fullText += extracted.text;
+            onChunk(extracted.text, endpoint);
+          }
 
-            if (partText) {
-              fullText += partText;
-              onChunk(partText, endpoint);
-            }
-
-            if (finishReason) {
-              streamEnded = true;
-              break;
-            }
-          } catch (parseErr) {}
+          if (extracted.finishReason) {
+            streamEnded = true;
+            break;
+          }
         }
 
         if (streamEnded) {
