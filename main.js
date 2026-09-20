@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, globalShortcut, desktopCapturer, screen, ipcMain, dialog, nativeImage, Notification, net, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const geminiTools = require('./gemini_tools.js');
 const nativeBridge = require('./nativeBridge');
 
@@ -59,6 +60,56 @@ let toolbarShortcutsActive = false;
 const userDataPath = app.getPath('userData');
 const configFilePath = path.join(userDataPath, 'config.json');
 const historyFilePath = path.join(userDataPath, 'history.json');
+
+// --- IN-MEMORY LRU CACHE ENGINE (Instant 0ms Repeated Response) ---
+class QuickResponseCache {
+  constructor(maxEntries = 300, ttlMs = 24 * 60 * 60 * 1000) {
+    this.maxEntries = maxEntries;
+    this.ttlMs = ttlMs;
+    this.cache = new Map();
+  }
+
+  _generateKey(modelId, categoryName, promptText) {
+    const norm = (promptText || '').trim();
+    return crypto.createHash('sha256').update(`${modelId || ''}:${categoryName || ''}:${norm}`).digest('hex');
+  }
+
+  get(modelId, categoryName, promptText) {
+    if (!promptText || !promptText.trim()) return null;
+    const key = this._generateKey(modelId, categoryName, promptText);
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() - item.timestamp > this.ttlMs) {
+      this.cache.delete(key);
+      return null;
+    }
+    // Refresh LRU position
+    this.cache.delete(key);
+    this.cache.set(key, item);
+    return item;
+  }
+
+  set(modelId, categoryName, promptText, fullText, endpointUsed) {
+    if (!promptText || !promptText.trim() || !fullText || !fullText.trim()) return;
+    const key = this._generateKey(modelId, categoryName, promptText);
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxEntries) {
+      const oldestKey = this.cache.keys().next().value;
+      this.cache.delete(oldestKey);
+    }
+    this.cache.set(key, {
+      fullText,
+      timestamp: Date.now(),
+      endpointUsed: endpointUsed || 'cache'
+    });
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+const quickResponseCache = new QuickResponseCache(300);
 
 // Default Text Prompts for Quick Text Ask
 const DEFAULT_TEXT_PROMPTS = [
@@ -670,7 +721,8 @@ function createToolbarWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: false
     }
   });
 
@@ -1844,10 +1896,31 @@ ipcMain.handle('crop-area', async (event, rect) => {
       globalShortcut.unregister('Escape');
     } catch (e) {}
 
-    // Ultra-performance image optimization: downscale to max 1024px to fit single Vision Transformer tile and maximize speed
+    // Dynamic Image Resolution based on crop area (Adaptive Vision Downscaling)
     let processedImg = cropped;
     const croppedSize = cropped.getSize();
-    const maxDimension = 1024;
+    const pixelArea = croppedSize.width * croppedSize.height;
+
+    let maxDimension = 1024;
+    let jpegQuality = 74;
+
+    if (pixelArea <= 250000) {
+      // Small crop (e.g. <= 500x500: single line, button, small word snippet)
+      // Extreme speed: ~12-20KB payload, single ViT tile, fastest upload and TTFT
+      maxDimension = 640;
+      jpegQuality = 70;
+    } else if (pixelArea <= 750000) {
+      // Medium crop (e.g. <= 900x800: paragraph, code block, modal dialog)
+      // Balanced speed & sharpness: ~30-45KB payload
+      maxDimension = 896;
+      jpegQuality = 72;
+    } else {
+      // Large crop (full screen or large window)
+      // Maximum detail for dense text and multi-column layouts
+      maxDimension = 1024;
+      jpegQuality = 74;
+    }
+
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
       let newW, newH;
       if (croppedSize.width >= croppedSize.height) {
@@ -1860,8 +1933,8 @@ ipcMain.handle('crop-area', async (event, rect) => {
       processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
     }
 
-    // Compress image to JPEG (Quality 72) for ultra-lightweight ~40-75KB payload with sharp OCR clarity
-    const jpegBuffer = processedImg.toJPEG(72);
+    // Compress image to JPEG with adaptive quality for minimum latency
+    const jpegBuffer = processedImg.toJPEG(jpegQuality);
     return `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
   }
 
@@ -1967,92 +2040,197 @@ function fastExtractSsePartText(jsonStr) {
   }
 }
 
-// Helper to execute a single resilient Gemini SSE stream with fallback
+// Helper to execute a resilient Gemini SSE stream with Stalled-Worker Race (1.2s Timeout) and endpoint fallback
 async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayload, onChunk) {
-  let fullText = '';
+  const fetchFn = (typeof net !== 'undefined' && net.fetch) ? net.fetch : fetch;
+  const STALL_TIMEOUT_MS = 1200;
   let lastError = null;
-  let usedEndpoint = null;
 
-  for (let i = 0; i < endpointCandidates.length; i++) {
-    const endpoint = endpointCandidates[i];
+  const runWorker = async (endpoint, signal, onFirstChunk) => {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    let response = await fetchFn(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload),
+      signal
+    });
 
-    try {
-      const fetchFn = (typeof net !== 'undefined' && net.fetch) ? net.fetch : fetch;
-      let response = await fetchFn(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestPayload)
-      });
+    // If endpoint rejects thinkingConfig with HTTP 400, retry once immediately without thinkingConfig
+    if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
+      try {
+        const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
+        delete fallbackPayload.generationConfig.thinkingConfig;
+        const retryRes = await fetchFn(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fallbackPayload),
+          signal
+        });
+        if (retryRes.ok) response = retryRes;
+      } catch (retryErr) {}
+    }
 
-      // If endpoint rejects thinkingConfig with HTTP 400, retry once immediately without thinkingConfig
-      if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
-        try {
-          const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
-          delete fallbackPayload.generationConfig.thinkingConfig;
-          const retryRes = await fetchFn(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fallbackPayload)
-          });
-          if (retryRes.ok) {
-            response = retryRes;
-          }
-        } catch (retryErr) {}
-      }
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
+    }
 
-      if (!response.ok) {
-        if (response.status === 404 || response.status === 400 || response.status === 503 || response.status === 429) {
-          continue;
-        }
-        const errText = await response.text();
-        throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
-      }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let sseBuffer = '';
+    let streamEnded = false;
+    let localFullText = '';
+    let isFirst = true;
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let sseBuffer = '';
-      let streamEnded = false;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split('\n');
+      sseBuffer = lines.pop();
 
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split('\n');
-        sseBuffer = lines.pop();
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data:')) continue;
-          const jsonStr = trimmed.replace(/^data:\s*/, '');
-          if (jsonStr === '[DONE]') {
-            streamEnded = true;
-            break;
-          }
-
-          const extracted = fastExtractSsePartText(jsonStr);
-          if (extracted.text) {
-            fullText += extracted.text;
-            onChunk(extracted.text, endpoint);
-          }
-
-          if (extracted.finishReason) {
-            streamEnded = true;
-            break;
-          }
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        const jsonStr = trimmed.replace(/^data:\s*/, '');
+        if (jsonStr === '[DONE]') {
+          streamEnded = true;
+          break;
         }
 
-        if (streamEnded) {
-          try { await reader.cancel(); } catch (e) {}
+        const extracted = fastExtractSsePartText(jsonStr);
+        if (extracted.text) {
+          if (isFirst) {
+            isFirst = false;
+            if (onFirstChunk) onFirstChunk();
+          }
+          localFullText += extracted.text;
+          if (onChunk) onChunk(extracted.text, endpoint);
+        }
+
+        if (extracted.finishReason) {
+          streamEnded = true;
           break;
         }
       }
 
-      usedEndpoint = endpoint;
-      return { success: true, fullText, endpoint: usedEndpoint };
+      if (streamEnded) {
+        try { await reader.cancel(); } catch (e) {}
+        break;
+      }
+    }
+
+    return { success: true, fullText: localFullText, endpoint };
+  };
+
+  // Stalled-Worker Race: if 2 or more candidate endpoints exist, race primary against backup if primary stalls > 1.2s
+  if (endpointCandidates && endpointCandidates.length > 1) {
+    let activeWinner = null;
+    const primaryController = new AbortController();
+    let backupController = null;
+    let stallTimer = null;
+    let primaryFirstTokenArrived = false;
+
+    try {
+      const raceResult = await new Promise((resolve, reject) => {
+        let primaryDone = false;
+        let backupDone = false;
+        let primaryFailed = false;
+        let backupFailed = false;
+
+        const startBackup = () => {
+          if (activeWinner || backupController || primaryFirstTokenArrived) return;
+          console.log(`[Stalled-Worker Race] Primary "${endpointCandidates[0]}" took > ${STALL_TIMEOUT_MS}ms. Starting backup node "${endpointCandidates[1]}" in parallel...`);
+          backupController = new AbortController();
+          runWorker(endpointCandidates[1], backupController.signal, () => {
+            if (!activeWinner) {
+              activeWinner = 'backup';
+              console.log(`[Stalled-Worker Race] Backup node "${endpointCandidates[1]}" won the race! Aborting stalled primary worker.`);
+              try { primaryController.abort(); } catch (e) {}
+            }
+          })
+          .then(res => {
+            backupDone = true;
+            if (activeWinner === 'backup' || !activeWinner) {
+              activeWinner = 'backup';
+              try { primaryController.abort(); } catch (e) {}
+              resolve(res);
+            }
+          })
+          .catch(err => {
+            backupFailed = true;
+            lastError = err;
+            if (activeWinner === 'backup' || primaryDone || primaryFailed) {
+              reject(err);
+            }
+          });
+        };
+
+        stallTimer = setTimeout(() => {
+          startBackup();
+        }, STALL_TIMEOUT_MS);
+
+        runWorker(endpointCandidates[0], primaryController.signal, () => {
+          if (!activeWinner) {
+            activeWinner = 'primary';
+            primaryFirstTokenArrived = true;
+            if (stallTimer) {
+              clearTimeout(stallTimer);
+              stallTimer = null;
+            }
+            if (backupController) {
+              try { backupController.abort(); } catch (e) {}
+            }
+          }
+        })
+        .then(res => {
+          primaryDone = true;
+          if (stallTimer) clearTimeout(stallTimer);
+          if (activeWinner === 'primary' || !activeWinner) {
+            activeWinner = 'primary';
+            if (backupController) {
+              try { backupController.abort(); } catch (e) {}
+            }
+            resolve(res);
+          }
+        })
+        .catch(err => {
+          primaryFailed = true;
+          lastError = err;
+          if (stallTimer) {
+            clearTimeout(stallTimer);
+            stallTimer = null;
+          }
+          if (activeWinner === 'primary') {
+            reject(err);
+          } else if (!backupController) {
+            startBackup();
+          } else if (backupFailed) {
+            reject(err);
+          }
+        });
+      });
+
+      return raceResult;
+    } catch (raceErr) {
+      console.warn('[Stalled-Worker Race] Race completed with error, attempting remaining fallback candidates:', raceErr.message);
+      lastError = raceErr;
+    } finally {
+      if (stallTimer) clearTimeout(stallTimer);
+    }
+  }
+
+  // Fallback to remaining candidates sequentially
+  const startIndex = (endpointCandidates && endpointCandidates.length > 1) ? 2 : 0;
+  for (let i = startIndex; i < (endpointCandidates ? endpointCandidates.length : 0); i++) {
+    const endpoint = endpointCandidates[i];
+    try {
+      const fallbackController = new AbortController();
+      const res = await runWorker(endpoint, fallbackController.signal, null);
+      return res;
     } catch (streamErr) {
-      console.warn(`[Gemini Stream Error] Endpoint "${endpoint}":`, streamErr.message);
+      console.warn(`[Gemini Stream Error] Fallback Endpoint "${endpoint}":`, streamErr.message);
       lastError = streamErr;
     }
   }
@@ -2553,6 +2731,32 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   const startTime = Date.now();
 
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
+  const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
+
+  // In-Memory LRU Cache check (Instant 0ms repeated query response)
+  const cached = quickResponseCache.get(selectedModel, resolvedCategory, optimizedPrompt);
+  if (cached) {
+    if (event.sender && !event.sender.isDestroyed()) {
+      event.sender.send('quick-answer-chunk', {
+        chunk: cached.fullText,
+        endpointUsed: cached.endpointUsed + ' (cached)'
+      });
+      event.sender.send('quick-answer-finish', {
+        fullText: cached.fullText,
+        durationSec: '0.00',
+        endpointUsed: cached.endpointUsed + ' (cached)',
+        cached: true
+      });
+    }
+
+    return {
+      success: true,
+      fullText: cached.fullText,
+      durationSec: '0.00',
+      endpointUsed: cached.endpointUsed + ' (cached)',
+      cached: true
+    };
+  }
 
   // Fast-track thinking budget: flash-lite models do NOT support thinkingConfig at all,
   // gemini-3.8-flash supports thinkingBudget: 0 for fastest TTFT, pro models use configured thinking
@@ -2562,13 +2766,9 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   if (isPro) {
     thinkingConf = getThinkingConfigForModel(selectedModel);
   } else if (!isFlashLite) {
-    // Only gemini-3.8-flash and similar flash models that support thinking
     thinkingConf = { thinkingConfig: { thinkingBudget: 0 } };
   }
-  // flash-lite: thinkingConf stays empty (no thinkingConfig sent)
 
-  // Dynamically resolve category-specific system instruction and optimal maxOutputTokens
-  const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
   const systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 1024;
 
@@ -2609,6 +2809,9 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
     const fullText = streamRes.fullText || '';
 
+    // Cache successful response in memory
+    quickResponseCache.set(selectedModel, resolvedCategory, optimizedPrompt, fullText, usedEndpoint);
+
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('quick-answer-finish', {
         fullText,
@@ -2630,6 +2833,89 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
       });
     }
     throw err;
+  }
+});
+
+// IPC Handler: Prepare parameters for Direct Renderer Streaming and check LRU Cache
+ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, categoryName, modelId }) => {
+  try {
+    restoreActiveClipboard();
+  } catch (e) {}
+
+  const apiKey = (currentConfig && currentConfig.apiKey) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    const err = new Error('กรุณาระบุ Google AI Studio API Key ในการตั้งค่าก่อนเริ่มใช้งาน (Settings)');
+    err.code = 'API_KEY_REQUIRED';
+    throw err;
+  }
+
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  const endpointsToTry = getCandidateEndpoints(selectedModel);
+  const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
+  const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
+
+  // Instant In-Memory Cache Check
+  const cached = quickResponseCache.get(selectedModel, resolvedCategory, optimizedPrompt);
+  if (cached) {
+    return {
+      cached: true,
+      fullText: cached.fullText,
+      durationSec: '0.00',
+      endpointUsed: cached.endpointUsed + ' (cached)'
+    };
+  }
+
+  const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
+  const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
+  let thinkingConf = {};
+  if (isPro) {
+    thinkingConf = getThinkingConfigForModel(selectedModel);
+  } else if (!isFlashLite) {
+    thinkingConf = { thinkingConfig: { thinkingBudget: 0 } };
+  }
+
+  const systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 1024;
+
+  const requestPayload = {
+    system_instruction: {
+      parts: [
+        { text: systemInstructionText }
+      ]
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: optimizedPrompt }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: maxTokens,
+      ...thinkingConf
+    }
+  };
+
+  return {
+    cached: false,
+    apiKey,
+    endpointsToTry,
+    selectedModel,
+    resolvedCategory,
+    optimizedPrompt,
+    requestPayload
+  };
+});
+
+// IPC Handler: Save Direct Renderer Stream result to In-Memory LRU Cache
+ipcMain.handle('save-quick-response-cache', (event, { modelId, categoryName, promptText, fullText, endpointUsed }) => {
+  try {
+    quickResponseCache.set(modelId, categoryName, promptText, fullText, endpointUsed);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 });
 

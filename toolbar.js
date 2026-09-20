@@ -215,6 +215,291 @@ function executeQuickPromptByIndex(index) {
   }
 }
 
+// --- FAST SSE PARSER FOR DIRECT RENDERER STREAMING ---
+function fastExtractSsePartText(jsonStr) {
+  const marker = '"text": "';
+  const startIdx = jsonStr.indexOf(marker);
+  if (startIdx !== -1) {
+    const valStart = startIdx + marker.length;
+    let endIdx = valStart;
+    let isEscaped = false;
+    while (endIdx < jsonStr.length) {
+      const c = jsonStr.charCodeAt(endIdx);
+      if (c === 92) {
+        isEscaped = !isEscaped;
+      } else if (c === 34 && !isEscaped) {
+        break;
+      } else {
+        isEscaped = false;
+      }
+      endIdx++;
+    }
+    if (endIdx < jsonStr.length) {
+      const rawText = jsonStr.substring(valStart, endIdx);
+      let text = rawText;
+      if (rawText.includes('\\')) {
+        try {
+          text = JSON.parse('"' + rawText + '"');
+        } catch (e) {}
+      }
+      const finishReason = jsonStr.includes('"finishReason"') ? 'STOP' : null;
+      return { text, finishReason };
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const candidate = parsed.candidates?.[0];
+    return {
+      text: candidate?.content?.parts?.[0]?.text || '',
+      finishReason: candidate?.finishReason || null
+    };
+  } catch (e) {
+    return { text: '', finishReason: null };
+  }
+}
+
+// Unified Streaming Engine: Direct Renderer Stream with 1.2s Stalled-Worker Race, LRU Cache, and IPC Fallback
+async function runQuickPromptStreaming({ promptText, promptId, categoryName }) {
+  quickAnswerStreamText = '';
+
+  const renderError = (errMsg) => {
+    const body = document.getElementById('quickAnswerBody');
+    const status = document.getElementById('quickAnswerStatus');
+    if (status) status.innerText = 'เกิดข้อผิดพลาด';
+    if (body) {
+      body.innerHTML = `<div style="color:#ef4444; font-size:12px; padding:4px 0; display:flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${errMsg || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
+    }
+  };
+
+  // 1. Attempt Direct Renderer Streaming if electronAPI exposes getQuickStreamParams
+  if (window.electronAPI && window.electronAPI.getQuickStreamParams) {
+    try {
+      const startTime = Date.now();
+      const params = await window.electronAPI.getQuickStreamParams({ promptText, promptId, categoryName });
+
+      // In-Memory LRU Cache Hit (Instant 0ms response)
+      if (params && params.cached) {
+        renderAnswerContent(params.fullText, true);
+        const status = document.getElementById('quickAnswerStatus');
+        if (status) status.innerText = `ตอบเสร็จสิ้น (${params.durationSec || '0.00'}s)`;
+        return;
+      }
+
+      const { apiKey, endpointsToTry, requestPayload, selectedModel, resolvedCategory, optimizedPrompt } = params;
+      const STALL_TIMEOUT_MS = 1200;
+
+      const runWorker = async (endpoint, signal, onFirstChunk) => {
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
+        let response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+          signal
+        });
+
+        if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
+          try {
+            const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
+            delete fallbackPayload.generationConfig.thinkingConfig;
+            const retryRes = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fallbackPayload),
+              signal
+            });
+            if (retryRes.ok) response = retryRes;
+          } catch (retryErr) {}
+        }
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let sseBuffer = '';
+        let streamEnded = false;
+        let localFullText = '';
+        let isFirst = true;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split('\n');
+          sseBuffer = lines.pop();
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.replace(/^data:\s*/, '');
+            if (jsonStr === '[DONE]') {
+              streamEnded = true;
+              break;
+            }
+
+            const extracted = fastExtractSsePartText(jsonStr);
+            if (extracted.text) {
+              if (isFirst) {
+                isFirst = false;
+                if (onFirstChunk) onFirstChunk();
+              }
+              localFullText += extracted.text;
+              quickAnswerStreamText = localFullText;
+              scheduleStreamRender();
+            }
+
+            if (extracted.finishReason) {
+              streamEnded = true;
+              break;
+            }
+          }
+
+          if (streamEnded) {
+            try { await reader.cancel(); } catch (e) {}
+            break;
+          }
+        }
+
+        return { success: true, fullText: localFullText, endpoint };
+      };
+
+      // Stalled-Worker Race (1.2s timeout) in renderer
+      let raceResult = null;
+
+      if (endpointsToTry && endpointsToTry.length > 1) {
+        let activeWinner = null;
+        const primaryController = new AbortController();
+        let backupController = null;
+        let stallTimer = null;
+        let primaryFirstToken = false;
+
+        try {
+          raceResult = await new Promise((resolve, reject) => {
+            let primaryDone = false;
+            let backupDone = false;
+            let primaryFailed = false;
+            let backupFailed = false;
+
+            const startBackup = () => {
+              if (activeWinner || backupController || primaryFirstToken) return;
+              console.log(`[Renderer Stalled-Worker Race] Primary "${endpointsToTry[0]}" > 1.2s. Starting backup "${endpointsToTry[1]}" in parallel...`);
+              backupController = new AbortController();
+              runWorker(endpointsToTry[1], backupController.signal, () => {
+                if (!activeWinner) {
+                  activeWinner = 'backup';
+                  try { primaryController.abort(); } catch (e) {}
+                }
+              })
+              .then(res => {
+                backupDone = true;
+                if (activeWinner === 'backup' || !activeWinner) {
+                  activeWinner = 'backup';
+                  try { primaryController.abort(); } catch (e) {}
+                  resolve(res);
+                }
+              })
+              .catch(err => {
+                backupFailed = true;
+                if (activeWinner === 'backup' || primaryDone || primaryFailed) {
+                  reject(err);
+                }
+              });
+            };
+
+            stallTimer = setTimeout(() => {
+              startBackup();
+            }, STALL_TIMEOUT_MS);
+
+            runWorker(endpointsToTry[0], primaryController.signal, () => {
+              if (!activeWinner) {
+                activeWinner = 'primary';
+                primaryFirstToken = true;
+                if (stallTimer) {
+                  clearTimeout(stallTimer);
+                  stallTimer = null;
+                }
+                if (backupController) {
+                  try { backupController.abort(); } catch (e) {}
+                }
+              }
+            })
+            .then(res => {
+              primaryDone = true;
+              if (stallTimer) clearTimeout(stallTimer);
+              if (activeWinner === 'primary' || !activeWinner) {
+                activeWinner = 'primary';
+                if (backupController) {
+                  try { backupController.abort(); } catch (e) {}
+                }
+                resolve(res);
+              }
+            })
+            .catch(err => {
+              primaryFailed = true;
+              if (stallTimer) {
+                clearTimeout(stallTimer);
+                stallTimer = null;
+              }
+              if (activeWinner === 'primary') {
+                reject(err);
+              } else if (!backupController) {
+                startBackup();
+              } else if (backupFailed) {
+                reject(err);
+              }
+            });
+          });
+        } catch (raceErr) {
+          console.warn('[Direct Renderer Stream] Race error:', raceErr.message);
+        } finally {
+          if (stallTimer) clearTimeout(stallTimer);
+        }
+      }
+
+      if (raceResult && raceResult.success) {
+        const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
+        renderAnswerContent(raceResult.fullText, true);
+        const status = document.getElementById('quickAnswerStatus');
+        if (status) status.innerText = `ตอบเสร็จสิ้น (${durationSec}s)`;
+
+        if (window.electronAPI && window.electronAPI.saveQuickResponseCache) {
+          window.electronAPI.saveQuickResponseCache({
+            modelId: selectedModel,
+            categoryName: resolvedCategory,
+            promptText: optimizedPrompt,
+            fullText: raceResult.fullText,
+            endpointUsed: raceResult.endpoint
+          });
+        }
+        return;
+      }
+    } catch (directErr) {
+      console.warn('[Direct Renderer Stream] Direct stream failed, falling back to IPC ask:', directErr.message);
+    }
+  }
+
+  // 2. Fallback to Main Process IPC Streaming
+  try {
+    const res = await window.electronAPI.quickTextAsk({
+      promptText,
+      promptId,
+      categoryName
+    });
+
+    if (res && res.fullText) {
+      renderAnswerContent(res.fullText, true);
+      const status = document.getElementById('quickAnswerStatus');
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+    }
+  } catch (err) {
+    renderError(err.message || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ');
+  }
+}
+
 async function executeQuickPrompt(promptId) {
   const prompt = currentQuickPrompts.find(p => p.id === promptId);
   if (!prompt) return;
@@ -290,28 +575,11 @@ async function executeQuickPrompt(promptId) {
   }
 
   showQuickAnswerCard(prompt.name);
-
-  try {
-    quickAnswerStreamText = '';
-    const res = await window.electronAPI.quickTextAsk({
-      promptText: finalPrompt,
-      promptId: prompt.id,
-      categoryName: prompt.name
-    });
-
-    if (res && res.fullText) {
-      renderAnswerContent(res.fullText);
-      const status = document.getElementById('quickAnswerStatus');
-      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
-    }
-  } catch (err) {
-    const body = document.getElementById('quickAnswerBody');
-    const status = document.getElementById('quickAnswerStatus');
-    if (status) status.innerText = 'เกิดข้อผิดพลาด';
-    if (body) {
-      body.innerHTML = `<div style="color:#ef4444; font-size:12px; padding:4px 0; display:flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${err.message || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
-    }
-  }
+  await runQuickPromptStreaming({
+    promptText: finalPrompt,
+    promptId: prompt.id,
+    categoryName: prompt.name
+  });
 }
 
 async function executeQuickPromptWithText(promptId, text) {
@@ -606,28 +874,11 @@ async function submitQuickCustomAsk() {
   toggleQuickCustomInput(false);
 
   showQuickAnswerCard('คำถามของคุณ');
-
-  try {
-    quickAnswerStreamText = '';
-    const res = await window.electronAPI.quickTextAsk({
-      promptText: finalPrompt,
-      promptId: 'custom_ask',
-      categoryName: 'คำถามของคุณ'
-    });
-
-    if (res && res.fullText) {
-      renderAnswerContent(res.fullText);
-      const status = document.getElementById('quickAnswerStatus');
-      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
-    }
-  } catch (err) {
-    const body = document.getElementById('quickAnswerBody');
-    const status = document.getElementById('quickAnswerStatus');
-    if (status) status.innerText = 'เกิดข้อผิดพลาด';
-    if (body) {
-      body.innerHTML = `<div style="color:#ef4444; font-size:12px; padding:4px 0; display:flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${err.message || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
-    }
-  }
+  await runQuickPromptStreaming({
+    promptText: finalPrompt,
+    promptId: 'custom_ask',
+    categoryName: 'คำถามของคุณ'
+  });
 }
 
 function handleCloseUI() {

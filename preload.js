@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTextPrompts: (prompts) => ipcRenderer.invoke('save-text-prompts', prompts),
   closeQuickText: () => ipcRenderer.send('close-quick-text'),
   quickTextAsk: (params) => ipcRenderer.invoke('gemini-quick-text-ask', params),
+  getQuickStreamParams: (params) => ipcRenderer.invoke('get-quick-stream-params', params),
+  saveQuickResponseCache: (params) => ipcRenderer.invoke('save-quick-response-cache', params),
   onOpenQuickTextToolbar: (callback) => ipcRenderer.on('open-quick-text-toolbar', (event, data) => callback(data)),
   onCloseQuickTextUI: (callback) => ipcRenderer.on('close-quick-text-ui', () => callback()),
   onQuickAnswerChunk: (callback) => {
