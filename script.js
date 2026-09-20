@@ -342,7 +342,7 @@ async function reanalyzeWithNewModel() {
       currentAnalysisResult.explain = parsed.explain;
       currentAnalysisResult.summary = parsed.summary;
       currentAnalysisResult.translate = parsed.translate;
-      if (parsed.ocr && (!currentAnalysisResult.ocr || !currentAnalysisResult.ocr.trim())) {
+      if (parsed.ocr) {
         currentAnalysisResult.ocr = parsed.ocr;
       }
       if (parsed.thinking_process) {
@@ -379,7 +379,7 @@ async function reanalyzeWithNewModel() {
     }
     hasAnswerCompleted = true;
 
-    if (data.ocrText && (!currentAnalysisResult.ocr || !currentAnalysisResult.ocr.trim())) {
+    if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length || currentAnalysisResult.ocr === '\uD83D\uDD17')) {
       currentAnalysisResult.ocr = data.ocrText;
     }
     currentDisplayModelName = selectedModelNameText();
@@ -1048,7 +1048,9 @@ function getCategoryContent(cat, result) {
       return isStreamingActive ? '' : '_*(ไม่มีข้อความสำหรับแปลภาษา)*_';
 
     case 'ocr':
-      if (ocrText) return ocrText;
+      if (ocrText && ocrText.length > 3 && !/^[\s\uD800-\uDBFF\uDC00-\uDFFF\u2600-\u27BF\uD83D\uDD17]+$/.test(ocrText)) return ocrText;
+      if (tr && tr.length > 5) return tr;
+      if (!isStreamingActive && ans) return ans;
       return isStreamingActive ? '' : '*(ไม่พบข้อความตัวอักษรที่ถอดได้จากภาพนี้)*';
 
     default:
@@ -1069,9 +1071,7 @@ function scheduleScreenStreamRender() {
 
 function renderStreamingContent() {
   const target = document.getElementById('liveStreamingContent');
-  if (!target) return;
-
-  if (!hasReceivedFirstToken) return;
+  if (!target || !hasReceivedFirstToken) return;
 
   let textRaw = getCategoryContent(activeCategory, currentAnalysisResult);
 
@@ -1100,21 +1100,6 @@ function renderStreamingContent() {
   }
 
   target.innerHTML = html;
-
-  if (typeof renderMathInElement !== 'undefined' && textRaw && (textRaw.includes('$') || textRaw.includes('\\('))) {
-    try {
-      renderMathInElement(target, {
-        delimiters: [
-          { left: '$$', right: '$$', display: true },
-          { left: '$', right: '$', display: false },
-          { left: '\\(', right: '\\)', display: false },
-          { left: '\\[', right: '\\]', display: true }
-        ],
-        throwOnError: false
-      });
-    } catch (e) {}
-  }
-
   chatThread.scrollTop = chatThread.scrollHeight;
 }
 
@@ -1217,7 +1202,7 @@ async function processScreenCapture(cropBox) {
         currentAnalysisResult.explain = parsed.explain;
         currentAnalysisResult.summary = parsed.summary;
         currentAnalysisResult.translate = parsed.translate;
-        if (parsed.ocr && (!currentAnalysisResult.ocr || !currentAnalysisResult.ocr.trim())) {
+        if (parsed.ocr) {
           currentAnalysisResult.ocr = parsed.ocr;
         }
         if (parsed.thinking_process) {
@@ -1259,8 +1244,18 @@ async function processScreenCapture(cropBox) {
       }
       hasAnswerCompleted = true;
 
-      if (data.ocrText && (!currentAnalysisResult.ocr || !currentAnalysisResult.ocr.trim())) {
+      if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length || currentAnalysisResult.ocr === '\uD83D\uDD17')) {
         currentAnalysisResult.ocr = data.ocrText;
+      }
+      // Ensure all 5 categories have robust content simultaneously!
+      if (!currentAnalysisResult.explain) {
+        currentAnalysisResult.explain = currentAnalysisResult.answer;
+      }
+      if (!currentAnalysisResult.summary) {
+        currentAnalysisResult.summary = createQuickBulletSummary(currentAnalysisResult.answer);
+      }
+      if (!currentAnalysisResult.translate && currentAnalysisResult.ocr) {
+        currentAnalysisResult.translate = currentAnalysisResult.answer;
       }
       currentDisplayModelName = selectedModelNameText();
 

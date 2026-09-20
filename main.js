@@ -2203,6 +2203,12 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     if (ocrMatch && ocrMatch[1]) {
       ocrText = ocrMatch[1].trim();
     }
+    if (!ocrText || ocrText.length < 5 || /^[\s\uD800-\uDBFF\uDC00-\uDFFF\u2600-\u27BF\uD83D\uDD17]+$/.test(ocrText)) {
+      const trMatch = fullText.match(/###?\s*\[?(?:TRANSLATE|TRANSLATION|คำแปล|แปลไทย|แปลภาษา|แปล)\]?[\r\n]+([\s\S]*?)(?:###?\s*\[|$)/i);
+      if (trMatch && trMatch[1] && trMatch[1].trim().length > 10) {
+        ocrText = trMatch[1].trim();
+      }
+    }
 
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('gemini-stream-finish', {
@@ -2236,15 +2242,28 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
 
   // 1. Initial scan result context (anchored as first user turn + model acknowledge)
   if (context) {
-    const contextStr = typeof context === 'object' ? JSON.stringify(context, null, 2) : String(context);
-    contents.push({
-      role: 'user',
-      parts: [{ text: `บริบทและผลการวิเคราะห์ภาพหน้าจอเดิม:\n${contextStr}\n\nเราจะเริ่มคุยต่อเนื่องเกี่ยวกับภาพนี้` }]
-    });
-    contents.push({
-      role: 'model',
-      parts: [{ text: 'รับทราบข้อมูลผลการวิเคราะห์ภาพหน้าจอเดิมแล้วครับ พร้อมตอบคำถามต่อเนื่องเกี่ยวกับภาพนี้ครับ' }]
-    });
+    let contextStr = '';
+    if (typeof context === 'object') {
+      const parts = [];
+      if (context.answer) parts.push(`คำตอบหลัก: ${context.answer}`);
+      if (context.ocr) parts.push(`ข้อความในภาพ: ${context.ocr}`);
+      if (context.explain) parts.push(`คำอธิบาย: ${context.explain}`);
+      if (context.summary) parts.push(`สรุป: ${context.summary}`);
+      contextStr = parts.join('\n\n') || JSON.stringify(context, (k, v) => (k === 'thumbnail' ? undefined : v));
+    } else {
+      contextStr = String(context);
+    }
+
+    if (contextStr.trim()) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: `บริบทและผลการวิเคราะห์ภาพหน้าจอเดิม:\n${contextStr}\n\nเราจะเริ่มคุยต่อเนื่องเกี่ยวกับภาพนี้` }]
+      });
+      contents.push({
+        role: 'model',
+        parts: [{ text: 'รับทราบข้อมูลผลการวิเคราะห์ภาพหน้าจอเดิมแล้วครับ พร้อมตอบคำถามต่อเนื่องเกี่ยวกับภาพนี้ครับ' }]
+      });
+    }
   }
 
   // 2. Add full multi-turn conversation history
@@ -2286,8 +2305,14 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
     }
   }
 
+  const thinkingConf = getThinkingConfigForModel(modelId);
   const requestBody = {
-    contents: sanitizedContents
+    contents: sanitizedContents,
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 2048,
+      ...thinkingConf
+    }
   };
 
   const startTime = Date.now();
