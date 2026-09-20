@@ -52,14 +52,15 @@ assert(scriptJs.includes('autoLaunch: autoLaunchVal'), 'script.js saveSettingsFr
 console.log('\n👉 [4] Verifying package.json WebSetup & Program Files Config');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
-assert(pkg.build && pkg.build.nsis, 'package.json contains build.nsis configuration');
-assert(pkg.build.nsis.artifactName === 'SnapMind_AI_WebSetup.exe', 'artifactName is configured as "SnapMind_AI_WebSetup.exe"');
-assert(pkg.build.nsis.perMachine === true, 'perMachine is set to true (installs into Program Files)');
-assert(pkg.build.nsis.allowToChangeInstallationDirectory === true, 'allowToChangeInstallationDirectory is true');
-assert(pkg.build.nsis.allowElevation === true, 'allowElevation is true (requests UAC for Program Files)');
+assert(pkg.build && (pkg.build.nsisWeb || pkg.build.nsis), 'package.json contains build.nsis/nsisWeb configuration');
+assert((pkg.build.nsisWeb && pkg.build.nsisWeb.artifactName === 'SnapMind_AI_WebSetup.exe') || (pkg.build.nsis && pkg.build.nsis.artifactName === 'SnapMind_AI_WebSetup.exe'), 'artifactName is configured as "SnapMind_AI_WebSetup.exe"');
+assert((pkg.build.nsisWeb?.perMachine || pkg.build.nsis?.perMachine) === true, 'perMachine is set to true (installs into Program Files)');
+assert((pkg.build.nsisWeb?.allowToChangeInstallationDirectory || pkg.build.nsis?.allowToChangeInstallationDirectory) === true, 'allowToChangeInstallationDirectory is true');
+assert((pkg.build.nsisWeb?.allowElevation || pkg.build.nsis?.allowElevation) === true, 'allowElevation is true (requests UAC for Program Files)');
 assert(pkg.build.compression === 'maximum', 'compression is set to maximum for minimal file size');
 assert(Array.isArray(pkg.build.electronLanguages) && pkg.build.electronLanguages.includes('th'), 'electronLanguages includes "th"');
 assert(pkg.scripts.dist.includes('--x64'), 'dist script specifies --x64 architecture for minimal file size');
+assert(pkg.build.publish && pkg.build.publish.repo === 'snapmind-ai', 'publish repo is configured to snapmind-ai');
 
 console.log('\n====================================================');
 console.log(`📊 RESULTS: ${passed} PASSED, ${failed} FAILED`);
