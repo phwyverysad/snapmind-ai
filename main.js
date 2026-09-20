@@ -1,8 +1,20 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, desktopCapturer, screen, ipcMain, dialog, nativeImage, Notification, net } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, desktopCapturer, screen, ipcMain, dialog, nativeImage, Notification, net, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const geminiTools = require('./gemini_tools.js');
 const nativeBridge = require('./nativeBridge');
+
+// --- SPECULATIVE CONNECTION PRE-WARMING ENGINE ---
+function prewarmGeminiConnection() {
+  try {
+    if (session && session.defaultSession && typeof session.defaultSession.preconnect === 'function') {
+      session.defaultSession.preconnect({
+        url: 'https://generativelanguage.googleapis.com',
+        numSockets: 3
+      });
+    }
+  } catch (e) {}
+}
 
 const os = require('os');
 
@@ -162,6 +174,10 @@ const TRAY_MODELS = [
 ];
 
 function getThinkingConfigForModel(modelId) {
+  // Flash-Lite models do NOT support thinkingConfig at all (sending it causes HTTP 400 error)
+  if (modelId && modelId.includes('flash-lite')) {
+    return {};
+  }
   const modelThinking = (currentConfig && currentConfig.modelThinking) || DEFAULT_CONFIG.modelThinking;
   const isEnabled = (modelThinking && modelThinking[modelId] !== undefined)
     ? Boolean(modelThinking[modelId])
@@ -838,6 +854,9 @@ function startQuickTextMode(cursorPos, text) {
   isAnswerCardActive = false;
   isSnippingActive = false;
 
+  // Speculative pre-warm: open TLS connection to Gemini API ahead of time while user selects category
+  prewarmGeminiConnection();
+
   if (!toolbarWindow || toolbarWindow.isDestroyed()) {
     createToolbarWindow();
   }
@@ -1229,9 +1248,10 @@ function startSnippingMode() {
   }
   lastSnippingTriggerTime = now;
 
-  // Ultra-speed optimization: Pre-capture desktop asynchronously so main thread doesn't freeze
+  // Ultra-speed optimization: Pre-capture desktop asynchronously and prewarm TLS connection
   setImmediate(() => {
     preCaptureDesktopSources();
+    prewarmGeminiConnection();
   });
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1457,6 +1477,13 @@ app.whenReady().then(() => {
   createToolbarWindow();
   createTrayIcon();
   registerGlobalHotkey();
+
+  // Pre-warm Google Gemini API TLS connection immediately at startup
+  prewarmGeminiConnection();
+  // Keep-alive heartbeat: refresh connection pool every 45s so socket never goes cold
+  setInterval(() => {
+    prewarmGeminiConnection();
+  }, 45000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1830,7 +1857,7 @@ ipcMain.handle('crop-area', async (event, rect) => {
         newH = maxDimension;
         newW = Math.max(1, Math.round((croppedSize.width / croppedSize.height) * maxDimension));
       }
-      processedImg = cropped.resize({ width: newW, height: newH, quality: 'better' });
+      processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
     }
 
     // Compress image to JPEG (Quality 78) for lightweight ~60-120KB payload with sharp OCR clarity
@@ -2009,34 +2036,28 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
   const thinkingConf = getThinkingConfigForModel(modelId);
 
   // Prompt 1: High-Speed Structured Analysis
-  const analysisPromptText = `คุณคือระบบ AI วิเคราะห์ภาพถ่ายหน้าจอความเร็วสูง วิเคราะห์ภาพนี้แล้วตอบทุกหมวดหมู่ให้สั้นกระชับ ตรงประเด็นที่สุด ตอบทีเดียวพร้อมกันครบทุกหัวข้อตามรูปแบบนี้อย่างเคร่งครัด:
+  const analysisPromptText = `วิเคราะห์ภาพหน้าจอและตอบให้สั้นกระชับ ตรงประเด็นที่สุด ครบทุกหัวข้อตามรูปแบบนี้:
 
 ### [ANSWER]
-(คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นที่สุดทันที จัดองค์ประกอบให้อ่านง่าย สบายตา จัดหัวข้อย่อยหรือรายการข้อด้วย Markdown bullet points (- ...) หากมีสูตรคณิตศาสตร์หรือสัญลักษณ์พิเศษให้ใช้รูปแบบ LaTeX $...$ หรือ $$...$$)
+(คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นทันที หากมีสูตรคณิตศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$)
 
 ### [EXPLAIN]
-(คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าและหัวข้อให้อ่านง่าย)
+(คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าให้อ่านง่าย)
 
 ### [SUMMARY]
-(สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points (- ...) 1-3 ข้อสั้นๆ อ่านง่าย)
+(สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points - ... 1-3 ข้อ)
 
 ### [TRANSLATE]
-(แปลเนื้อหาหรือข้อความภาษาต่างประเทศทั้งหมดในภาพออกมาเป็นภาษาไทยโดยตรงเท่านั้น แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำ ห้ามมีข้อความภาษาอังกฤษก่อนหน้าคำแปลเด็ดขาด แปลตรงตัวตามเนื้อหาต้นฉบับ 100% ประโยคต่อประโยค ย่อหน้าต่อย่อหน้า หรือหัวข้อต่อหัวข้อตามลำดับต้นฉบับ โดยรักษารูปแบบและองค์ประกอบ (Layout & Spatial Composition) ให้ตรงกับภาพต้นฉบับ เช่น การขึ้นบรรทัดใหม่ การเว้นวรรค หัวข้อ รายการข้อ (Bullet points - ...) ตาราง Markdown เพื่อให้อ่านง่าย สวยงาม ห้ามแต่งเติมหัวข้อใหม่ และห้ามแสดงข้อความภาษาอังกฤษต้นฉบับ ห้ามเว้นว่างส่วนนี้)
+(แปลเนื้อหาภาษาต่างประเทศทั้งหมดในภาพออกมาเป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำภาษาอังกฤษมาแสดงซ้ำ แปลตรงตัว 100% คงโครงสร้างการจัดวางเดิมไว้)
 `;
 
   // Prompt 2: High-Speed Direct Concurrent OCR & Layout Analysis (Runs in parallel with analysis from t=0!)
-  const ocrPromptText = `คุณคือระบบ Optical Character Recognition (OCR) และ Document Layout Analysis คุณภาพสูง
-ภารกิจ: ถอดข้อความตัวอักษรทุกคำ ทุกบรรทัด ทุกภาษา (รวมถึงสัญลักษณ์ สมการคณิตศาสตร์ และโค้ด) ที่ปรากฏในภาพต้นฉบับออกมาแบบเป๊ะๆ 100% ตามภาษาเดิม พร้อมทั้งรักษารูปแบบและองค์ประกอบการจัดวาง (Spatial Composition & Visual Layout) ให้ตรงกับภาพต้นฉบับหรือจัดองค์ประกอบให้อ่านง่าย สวยงามที่สุด:
-1. การจัดวางองค์ประกอบ (Layout & Structure):
-   - รักษาระยะการขึ้นบรรทัดใหม่ การเว้นวรรค และย่อหน้าตามภาพต้นฉบับ
-   - หากในภาพมี "ตาราง" ให้จัดเป็นตาราง Markdown Table (| คอลัมน์ 1 | คอลัมน์ 2 |) ให้ตรงแถวและคอลัมน์อย่างสวยงาม
-   - หากในภาพมี "หัวข้อ" หรือข้อความตัวหนา/ขนาดใหญ่ ให้ใส่ระดับหัวข้อ Markdown (#, ##, ### หรือ **ตัวหนา**)
-   - หากในภาพมี "รายการ" (Bullet points / Numbering) ให้คงสัญลักษณ์และลำดับรายการไว้เป๊ะๆ
-   - หากในภาพมี "โค้ดคอมพิวเตอร์" หรือคำสั่ง Terminal ให้ใส่ใน Code Block (\`\`\`...\`\`\`)
-2. ข้อห้าม:
-   - ถอดข้อความตามภาษาเดิม ห้ามแปล ห้ามสรุป ห้ามตัดทอนข้อความ และห้ามอธิบายเพิ่มเติม
-   - ห้ามใส่คำทักทายหรือคำนำ เริ่มถอดข้อความบรรทัดแรกโดยตรงทันที
-   - หากไม่มีข้อความในภาพให้ระบุว่า "(ไม่มีข้อความในภาพ)"`;
+  const ocrPromptText = `ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ในภาพต้นฉบับออกมาเป๊ะๆ 100% ตามภาษาเดิม:
+1. คงระยะการขึ้นบรรทัดใหม่ การเว้นวรรค และย่อหน้าตามภาพต้นฉบับ
+2. หากมีตารางให้จัดเป็น Markdown Table (| ... |) ให้ตรงแถวและคอลัมน์
+3. หากมีหัวข้อให้ใส่ระดับหัวข้อ Markdown (#, ##, **ตัวหนา**)
+4. หากมีโค้ดคอมพิวเตอร์ให้ใส่ใน Code Block (\`\`\`...\`\`\`)
+5. ห้ามแปล ห้ามสรุป ห้ามใส่คำทักทาย หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)"`;
 
   const analysisPayload = {
     contents: [
@@ -2054,6 +2075,9 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     }
   };
 
+  const isFlashLite = modelId && modelId.includes('flash-lite');
+  const ocrThinkingConf = isFlashLite ? {} : { thinkingConfig: { thinkingBudget: 0 } };
+
   const ocrPayload = {
     contents: [
       {
@@ -2066,9 +2090,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     generationConfig: {
       temperature: 0.0,
       maxOutputTokens: 1536,
-      thinkingConfig: {
-        thinkingBudget: 0
-      }
+      ...ocrThinkingConf
     }
   };
 
@@ -2300,25 +2322,38 @@ ipcMain.handle('save-image-file', async (event, { dataUrl, defaultFilename }) =>
 
 // --- QUICK TEXT ASK & CUSTOM PROMPTS IPC HANDLERS ---
 const CATEGORY_SYSTEM_INSTRUCTIONS = {
-  answer: "คุณคือผู้ช่วย AI อัจฉริยะที่เชี่ยวชาญการตอบคำถามและแก้โจทย์ จงตอบคำถามหรือแก้โจทย์จากข้อความที่ได้รับอย่างถูกต้อง ชัดเจน และตรงประเด็นที่สุด แสดงผลลัพธ์ทันทีโดยไม่ต้องมีคำทักทายหรือเกริ่นนำ หากเป็นโจทย์ปัญหาหรือโค้ด ให้แสดงขั้นตอนที่จำเป็นและคำตอบอย่างชัดเจน จัดรูปแบบด้วย Markdown ให้อ่านง่าย",
+  answer: "ตอบคำถามหรือแก้โจทย์ทันทีอย่างถูกต้อง ชัดเจน และตรงประเด็น ไม่ต้องมีคำทักทาย หากเป็นโจทย์ปัญหาหรือโค้ดให้แสดงขั้นตอนที่จำเป็นและคำตอบอย่างชัดเจนด้วย Markdown",
 
-  explain: "คุณคือผู้เชี่ยวชาญในการอธิบายเนื้อหา จงอธิบายความหมาย สาระสำคัญ แนวคิด และบริบทของข้อความที่ได้รับให้เข้าใจง่าย ชัดเจน ตรงประเด็น ใช้ภาษาที่ลื่นไหล เป็นธรรมชาติ จัดย่อหน้าหรือใช้ Markdown bullet points ให้อ่านง่ายสบายตา ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+  explain: "อธิบายความหมาย สาระสำคัญ และแนวคิดของข้อความให้เข้าใจง่าย ชัดเจน ตรงประเด็น ใช้ภาษาธรรมชาติ จัดย่อหน้าหรือ bullet points ให้อ่านง่าย ไม่ต้องมีคำทักทาย",
 
-  summarize: "คุณคือผู้เชี่ยวชาญด้านการสรุปความ จงจับใจความสำคัญและสรุปประเด็นหลักของเนื้อหาต่อไปนี้ให้กระชับ ครบถ้วน ได้ใจความที่สุด แสดงผลลัพธ์เป็นข้อๆ ด้วย Markdown bullet points (- ...) สั้นกระชับ อ่านง่าย ตรงประเด็นทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+  summarize: "สรุปประเด็นสำคัญให้กระชับ ครบถ้วน ได้ใจความที่สุด แสดงผลลัพธ์เป็นข้อๆ ด้วย Markdown bullet points (- ...) ทันที ไม่ต้องมีคำทักทาย",
 
-  translate_th: "คุณคือผู้เชี่ยวชาญด้านการแปลภาษา จงแปลเนื้อหาต่อไปนี้เป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำ ห้ามมีคำทักทายหรือเกริ่นนำ แปลตรงตัวตามเนื้อหาต้นฉบับ 100% (Literal & Verbatim Translation) ประโยคต่อประโยค ย่อหน้าต่อย่อหน้า คงโครงสร้างการจัดวางเดิมไว้ให้อ่านง่าย สวยงาม ไม่แต่งเติมหัวข้อใหม่ที่ไม่ปรากฏในต้นฉบับ",
+  translate_th: "แปลเนื้อหาเป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำภาษาเดิมมาแสดงซ้ำ ห้ามมีคำทักทาย แปลตรงตัวตามต้นฉบับ 100% ประโยคต่อประโยค ย่อหน้าต่อย่อหน้า คงโครงสร้างการจัดวางเดิมไว้ ไม่แต่งเติมหัวข้อใหม่",
 
-  proofread: "คุณคือบรรณาธิการและผู้เชี่ยวชาญด้านการพิสูจน์อักษร (Proofreader & Copyeditor) จงตรวจคำผิด แก้ไขหลักไวยากรณ์ การเว้นวรรค และขัดเกลาสำนวนของข้อความที่ได้รับให้ถูกต้อง สละสลวย เป็นธรรมชาติ และเป็นมืออาชีพที่สุด โดยแสดงข้อความฉบับปรับปรุงที่ถูกต้องสมบูรณ์แบบทันทีก่อนเป็นอันดับแรก จากนั้นหากมีการแก้ไขสำคัญ สามารถสรุปจุดที่แก้ไขเป็นข้อย่อยสั้นๆ 1-3 ข้อด้านล่างได้ ไม่ต้องมีคำทักทาย",
+  proofread: "ตรวจคำผิด แก้ไขไวยากรณ์ และขัดเกลาสำนวนให้ถูกต้องสมบูรณ์และเป็นมืออาชีพ แสดงข้อความฉบับปรับปรุงที่ถูกต้องสมบูรณ์ทันทีก่อนเป็นอันดับแรก จากนั้นหากมีการแก้ไขสำคัญให้สรุปจุดแก้ไขสั้นๆ 1-3 ข้อด้านล่างได้ ไม่ต้องมีคำทักทาย",
 
-  shorten: "คุณคือผู้เชี่ยวชาญด้านการย่อความและตัดทอนเนื้อหา จงตัดทอนคำฟุ่มเฟือยและย่อข้อความต่อไปนี้ให้สั้นและกระชับที่สุด โดยยังคงความหมายสำคัญและสาระสำคัญของต้นฉบับครบถ้วน 100% แสดงเฉพาะข้อความที่ย่อแล้วทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+  shorten: "ตัดทอนคำฟุ่มเฟือยและย่อข้อความให้สั้นและกระชับที่สุดโดยคงสาระสำคัญครบถ้วน 100% แสดงเฉพาะข้อความที่ย่อแล้วทันที ไม่ต้องมีคำทักทาย",
 
-  ocr: "คุณคือระบบ Optical Character Recognition (OCR) และ Text Digitizer คุณภาพสูง จงถอดและจัดระเบียบข้อความ สัญลักษณ์ หรือโค้ดต่อไปนี้ออกมาอย่างถูกต้องเป๊ะๆ 100% ตามต้นฉบับ แก้ไขการตัดคำผิดหรือบรรทัดแตกจากการคัดลอก และหากเป็นโค้ดคอมพิวเตอร์ให้จัดวางใน Code Block (```...```) อย่างถูกต้อง ห้ามแปล ห้ามสรุป และห้ามเพิ่มคำทักทาย",
+  ocr: "ถอดและจัดระเบียบข้อความหรือโค้ดออกมาถูกต้อง 100% ตามต้นฉบับ หากเป็นโค้ดคอมพิวเตอร์ให้จัดวางใน Code Block (```...```) ห้ามแปล ห้ามสรุป ห้ามทักทาย",
 
-  continue_writing: "คุณคือผู้เชี่ยวชาญในการประพันธ์และเขียนเนื้อหาต่อ (Content Continuation Specialist) ภารกิจของคุณคือ: เขียนเนื้อหาภาคต่อจากข้อความที่ได้รับอย่างลื่นไหล สมบูรณ์ เป็นธรรมชาติ และสอดคล้องกับโทน บริบท และจุดประสงค์ของข้อความเดิมอย่างแนบเนียน ข้อสำคัญที่สุด: ห้ามนำข้อความเดิมมาพิมพ์ซ้ำเด็ดขาด ให้เริ่มเขียนเนื้อหาส่วนที่ต่อจากเดิมโดยตรงทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+  continue_writing: "เขียนเนื้อหาภาคต่อจากข้อความอย่างลื่นไหล สมบูรณ์ และสอดคล้องกัน ห้ามนำข้อความเดิมมาพิมพ์ซ้ำเด็ดขาด ให้เริ่มเขียนเนื้อหาส่วนต่อโดยตรงทันที ไม่ต้องมีคำทักทาย",
 
-  define: "คุณคือผู้เชี่ยวชาญด้านสารานุกรมและพจนานุกรม จงอธิบายว่าคำหรือหัวข้อที่ได้รับคืออะไร มีความหมาย นิยาม ความสำคัญ และหลักการทำงานหรือประโยชน์อย่างไร สรุปให้อ่านเข้าใจง่าย ชัดเจน ตรงประเด็นในทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ",
+  define: "อธิบายว่าคืออะไร มีความหมาย นิยาม ความสำคัญ หรือหลักการทำงานอย่างไร สรุปให้กระชับ ชัดเจน ตรงประเด็นทันที ไม่ต้องมีคำทักทาย",
 
-  custom_ask: "คุณคือผู้ช่วย AI อัจฉริยะ จงตอบและปฏิบัติตามคำสั่งของผู้ใช้อย่างถูกต้อง ชัดเจน และตรงประเด็นที่สุด โดยอ้างอิงจากข้อความที่ผู้ใช้กำหนด ให้คำตอบทันทีโดยไม่ต้องมีคำทักทายหรือเกริ่นนำที่ไม่จำเป็น"
+  custom_ask: "ตอบและปฏิบัติตามคำสั่งของผู้ใช้อย่างถูกต้อง ชัดเจน และตรงประเด็นทันที ไม่ต้องมีคำทักทายหรือเกริ่นนำ"
+};
+
+const CATEGORY_MAX_OUTPUT_TOKENS = {
+  shorten: 512,
+  define: 512,
+  translate_th: 768,
+  answer: 1024,
+  ocr: 1024,
+  proofread: 1024,
+  summarize: 1024,
+  explain: 1536,
+  continue_writing: 1536,
+  custom_ask: 1536
 };
 
 function resolveQuickTextCategory(promptId, promptText) {
@@ -2493,8 +2528,10 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   }
   // flash-lite: thinkingConf stays empty (no thinkingConfig sent)
 
-  // Dynamically resolve category-specific system instruction so every category performs its intended function
-  const systemInstructionText = getQuickTextSystemInstruction(promptId, promptText);
+  // Dynamically resolve category-specific system instruction and optimal maxOutputTokens
+  const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
+  const systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 1024;
 
   const requestPayload = {
     system_instruction: {
@@ -2512,7 +2549,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
     ],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 2048,
+      maxOutputTokens: maxTokens,
       ...thinkingConf
     }
   };
