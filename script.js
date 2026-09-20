@@ -391,7 +391,7 @@ async function reanalyzeWithNewModel() {
     if (latencyText) latencyText.innerText = "เกิดข้อผิดพลาดในการวิเคราะห์";
     const target = document.getElementById('liveStreamingContent');
     if (target) {
-      target.innerHTML = `<div style="color: #ef4444; padding: 8px;">⚠️ เกิดข้อผิดพลาด: ${data.error || 'ไม่สามารถประมวลผลข้อมูลได้'}</div>`;
+      target.innerHTML = `<div style="color: #ef4444; padding: 8px;">เกิดข้อผิดพลาด: ${data.error || 'ไม่สามารถประมวลผลข้อมูลได้'}</div>`;
     }
     window.electronAPI.removeStreamListeners();
   });
@@ -405,7 +405,7 @@ async function reanalyzeWithNewModel() {
     if (latencyText) latencyText.innerText = "เกิดข้อผิดพลาด";
     const target = document.getElementById('liveStreamingContent');
     if (target) {
-      target.innerHTML = `<div style="color: #ef4444; padding: 8px;">⚠️ ${err.message}</div>`;
+      target.innerHTML = `<div style="color: #ef4444; padding: 8px;">${err.message}</div>`;
     }
   }
 }
@@ -1250,7 +1250,7 @@ async function processScreenCapture(cropBox) {
       if (latencyText) latencyText.innerText = "เกิดข้อผิดพลาดในการสตรีม";
       const target = document.getElementById('liveStreamingContent');
       if (target) {
-        target.innerHTML = `<div style="color: #ef4444; padding: 8px;">⚠️ เกิดข้อผิดพลาด: ${data.error || 'ไม่สามารถสตรีมข้อมูลได้'}</div>`;
+        target.innerHTML = `<div style="color: #ef4444; padding: 8px;">เกิดข้อผิดพลาด: ${data.error || 'ไม่สามารถสตรีมข้อมูลได้'}</div>`;
       }
       window.electronAPI.removeStreamListeners();
     });
@@ -1277,7 +1277,7 @@ async function processScreenCapture(cropBox) {
     }
 
     if (err.message && (err.message.includes('API Key') || err.code === 'API_KEY_REQUIRED')) {
-      alert("⚠️ กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
+      alert("กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
       openSettingsModal();
       return;
     }
@@ -1410,10 +1410,10 @@ function formatToolsDataHtml(toolsData) {
       html += `
         <div class="code-execution-block">
           <div class="code-execution-header">
-            <span>🐍 Python Code Execution</span>
+            <span>Python Code Execution</span>
           </div>
           <div class="code-execution-body">${escapeHtml(code)}</div>
-          ${output ? `<div class="code-execution-output">💻 ผลลัพธ์:\n${escapeHtml(output)}</div>` : ''}
+          ${output ? `<div class="code-execution-output">ผลลัพธ์:\n${escapeHtml(output)}</div>` : ''}
         </div>
       `;
     });
@@ -1427,7 +1427,6 @@ function formatToolsDataHtml(toolsData) {
       } else if (fr.result && fr.result.temperature_celsius !== undefined) {
         html += `
           <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px 14px; margin:8px 0; display:flex; align-items:center; gap:12px;">
-            <span style="font-size:1.6rem;">🌤️</span>
             <div>
               <div style="font-weight:600; color:#f8fafc; font-size:0.85rem;">สภาพอากาศ: ${escapeHtml(fr.result.location)}</div>
               <div style="color:#38bdf8; font-size:0.8rem; font-family:'Fira Code',monospace;">${fr.result.temperature_celsius}°C (${fr.result.temperature_fahrenheit}°F) • ${escapeHtml(fr.result.condition)} • ความชื้น ${fr.result.humidity}</div>
@@ -1444,24 +1443,24 @@ function formatToolsDataHtml(toolsData) {
                        (toolsData.citations?.files?.length > 0);
 
   if (hasCitations) {
-    html += '<div class="citations-container"><div class="citations-header">🔗 แหล่งข้อมูลอ้างอิง:</div><div class="citations-list">';
+    html += '<div class="citations-container"><div class="citations-header">แหล่งข้อมูลอ้างอิง:</div><div class="citations-list">';
 
     if (toolsData.citations?.urls) {
       toolsData.citations.urls.forEach(u => {
-        html += `<a href="${escapeHtml(u.url)}" target="_blank" class="citation-pill" title="${escapeHtml(u.citedText || u.title)}">🌐 <span>${escapeHtml(u.title || u.url)}</span></a>`;
+        html += `<a href="${escapeHtml(u.url)}" target="_blank" class="citation-pill" title="${escapeHtml(u.citedText || u.title)}"><span>${escapeHtml(u.title || u.url)}</span></a>`;
       });
     }
 
     if (toolsData.citations?.places) {
       toolsData.citations.places.forEach(p => {
-        html += `<a href="${escapeHtml(p.url)}" target="_blank" class="citation-pill" translate="no" title="Google Maps Place">📍 <span translate="no">${escapeHtml(p.name)}</span></a>`;
+        html += `<a href="${escapeHtml(p.url)}" target="_blank" class="citation-pill" translate="no" title="Google Maps Place"><span translate="no">${escapeHtml(p.name)}</span></a>`;
       });
     }
 
     if (toolsData.citations?.files) {
       toolsData.citations.files.forEach(f => {
         const pageText = f.pageNumber ? ` (น. ${f.pageNumber})` : '';
-        html += `<span class="citation-pill" title="${escapeHtml(f.source || '')}">📁 <span>${escapeHtml(f.fileName)}${pageText}</span></span>`;
+        html += `<span class="citation-pill" title="${escapeHtml(f.source || '')}"><span>${escapeHtml(f.fileName)}${pageText}</span></span>`;
       });
     }
 
@@ -1835,13 +1834,13 @@ function copyAllChat() {
   bubbles.forEach(bubble => {
     if (bubble.classList.contains('user')) {
       const userText = bubble.innerText.trim();
-      if (userText) formatted.push(`👤 ผู้ใช้:\n${userText}`);
+      if (userText) formatted.push(`ผู้ใช้:\n${userText}`);
     } else if (bubble.classList.contains('ai')) {
       const tagEl = bubble.querySelector('.ai-badge-tag span');
       const title = tagEl ? tagEl.innerText.trim() : 'Gemini AI';
       const contentEl = bubble.querySelector('div[id^="bubble_"]');
       const contentText = contentEl ? contentEl.innerText.trim() : '';
-      if (contentText) formatted.push(`🤖 ${title}:\n${contentText}`);
+      if (contentText) formatted.push(`${title}:\n${contentText}`);
     }
   });
 
@@ -2530,7 +2529,7 @@ function handleQuickAnswerError(data) {
   const status = document.getElementById('quickAnswerStatus');
   if (status) status.innerText = 'เกิดข้อผิดพลาด';
   if (body) {
-    body.innerHTML = `<div style="color:#ef4444; font-size:0.82rem; padding:6px 0;">❌ ${data?.error || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
+    body.innerHTML = `<div style="color:#ef4444; font-size:0.82rem; padding:6px 0;">${data?.error || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
   }
 }
 

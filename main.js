@@ -493,17 +493,17 @@ function registerElectronGlobalShortcutFallback() {
     try {
       globalShortcut.unregister(primaryHotkey);
       const success = globalShortcut.register(primaryHotkey, () => {
-        console.log(`🚀 Global hotkey triggered via Electron globalShortcut: ${primaryHotkey}`);
+        console.log(`[Hotkey] Global hotkey triggered via Electron globalShortcut: ${primaryHotkey}`);
         startSnippingMode();
       });
 
       if (success) {
-        console.log(`✓ Active Global Hotkey (Electron): ${primaryHotkey}`);
+        console.log(`[Hotkey] Active Global Hotkey (Electron): ${primaryHotkey}`);
       } else {
-        console.warn(`⚠️ Could not register global hotkey (Electron): ${primaryHotkey}`);
+        console.warn(`[Hotkey] Could not register global hotkey (Electron): ${primaryHotkey}`);
       }
     } catch (e) {
-      console.error(`❌ Exception registering ${primaryHotkey}:`, e);
+      console.error(`[Hotkey] Exception registering ${primaryHotkey}:`, e);
     }
   }
 
@@ -526,17 +526,17 @@ function registerElectronGlobalShortcutFallback() {
           console.log(`[GlobalShortcut] Quick text ignored because toolbar is already active`);
           return;
         }
-        console.log(`🚀 Quick Text Ask triggered via Electron globalShortcut: ${quickHotkey}`);
+        console.log(`[Hotkey] Quick Text Ask triggered via Electron globalShortcut: ${quickHotkey}`);
         handleQuickTextTrigger();
       });
 
       if (success) {
-        console.log(`✓ Active Quick Text Hotkey (Electron): ${quickHotkey}`);
+        console.log(`[Hotkey] Active Quick Text Hotkey (Electron): ${quickHotkey}`);
       } else {
-        console.warn(`⚠️ Could not register quick text hotkey (Electron): ${quickHotkey}`);
+        console.warn(`[Hotkey] Could not register quick text hotkey (Electron): ${quickHotkey}`);
       }
     } catch (e) {
-      console.error(`❌ Exception registering quick text hotkey ${quickHotkey}:`, e);
+      console.error(`[Hotkey] Exception registering quick text hotkey ${quickHotkey}:`, e);
     }
   }
 }
@@ -974,11 +974,11 @@ function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
       isNativeHookActive = true;
       nativeBridge.startHookPolling({
         onSnip: () => {
-          console.log('🚀 Native In-Process Win32 Hook Triggered (Snip)!');
+          console.log('[Native Hook] In-Process Win32 Hook Triggered (Snip)!');
           startSnippingMode();
         },
         onQuickText: (text) => {
-          console.log(`🚀 Native In-Process Win32 Hook Triggered (Quick Text, length=${text ? text.length : 0})!`);
+          console.log(`[Native Hook] In-Process Win32 Hook Triggered (Quick Text, length=${text ? text.length : 0})!`);
           lastCapturedQuickText = text || '';
           setActiveToolbarCapturedText(text || '');
           const cursorPos = screen.getCursorScreenPoint();
@@ -1029,13 +1029,13 @@ function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
           lastCapturedQuickText = text;
           setActiveToolbarCapturedText(text);
           const cursorPos = screen.getCursorScreenPoint();
-          console.log(`🚀 Quick Text Triggered With Text (length: ${text.length})`);
+          console.log(`[Native Hook] Quick Text Triggered With Text (length: ${text.length})`);
           startQuickTextMode(cursorPos, text);
         }
       } else if (msg.includes('HOTKEY_TRIGGERED:QUICK_TEXT')) {
-        console.log('🚀 Native Win32 Low-Level Keyboard Hook Triggered (Quick Text - capturing in background)...');
+        console.log('[Native Hook] Win32 Low-Level Keyboard Hook Triggered (Quick Text - capturing in background)...');
       } else if (msg.includes('HOTKEY_TRIGGERED:SNIP') || (msg.includes('HOTKEY_TRIGGERED') && !msg.includes('QUICK_TEXT'))) {
-        console.log('🚀 Native Win32 Low-Level Keyboard Hook Triggered (Snip)!');
+        console.log('[Native Hook] Win32 Low-Level Keyboard Hook Triggered (Snip)!');
         startSnippingMode();
       }
 
@@ -1545,7 +1545,7 @@ async function callGeminiApiWithFallback(requestPayload, modelId) {
       if (response.status === 429) {
         let retryMatch = errText.match(/retry in ([0-9\.]+)s/i);
         let retrySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 30;
-        lastError = new Error(`⚠️ โควต้าการใช้งาน API ชั่วคราวเต็ม (Rate Limit 429)\n\nกรุณารอประมาณ ${retrySec} วินาทีแล้วลองใหม่อีกครั้ง หรือสลับโมเดล`);
+        lastError = new Error(`โควต้าการใช้งาน API ชั่วคราวเต็ม (Rate Limit 429)\n\nกรุณารอประมาณ ${retrySec} วินาทีแล้วลองใหม่อีกครั้ง หรือสลับโมเดล`);
         lastError.status = 429;
         // Continue to fallback model if available
         continue;

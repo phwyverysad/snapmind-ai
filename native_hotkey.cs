@@ -284,36 +284,59 @@ class NativeHotkeyHook
     private static IntPtr _lastTargetAppHwnd = IntPtr.Zero;
     private static readonly object _copyLock = new object();
 
+    private static uint _myPid = 0;
+    private static IntPtr _lastCheckedHwnd = IntPtr.Zero;
+    private static bool _lastCheckedIsApp = false;
+    private static readonly System.Collections.Generic.HashSet<uint> _appPids = new System.Collections.Generic.HashSet<uint>();
+    private static readonly System.Collections.Generic.HashSet<uint> _nonAppPids = new System.Collections.Generic.HashSet<uint>();
+
     public static bool IsAppWindow(IntPtr hWnd)
     {
         if (hWnd == IntPtr.Zero) return true;
+        if (hWnd == _lastCheckedHwnd) return _lastCheckedIsApp;
         uint pid;
         GetWindowThreadProcessId(hWnd, out pid);
-        return IsAppProcess(pid);
+        bool isApp = IsAppProcess(pid);
+        _lastCheckedHwnd = hWnd;
+        _lastCheckedIsApp = isApp;
+        return isApp;
     }
 
     public static bool IsAppProcess(uint pid)
     {
         if (pid == 0 || pid == 4) return true;
-        uint myPid = (uint)Process.GetCurrentProcess().Id;
-        if (pid == myPid) return true;
+        if (_myPid == 0) _myPid = (uint)Process.GetCurrentProcess().Id;
+        if (pid == _myPid) return true;
         if (_electronPid != 0 && pid == _electronPid) return true;
 
-        try
+        lock (_appPids)
         {
-            using (Process p = Process.GetProcessById((int)pid))
+            if (_appPids.Contains(pid)) return true;
+            if (_nonAppPids.Contains(pid)) return false;
+
+            if (_appPids.Count + _nonAppPids.Count > 200)
             {
-                string pName = p.ProcessName.ToLower();
-                if (pName.Contains("snapmind") || pName.Contains("hotkey_hook")) return true;
-                if (pName.Contains("electron"))
+                _appPids.Clear();
+                _nonAppPids.Clear();
+            }
+
+            try
+            {
+                using (Process p = Process.GetProcessById((int)pid))
                 {
-                    if (_electronPid != 0) return true;
+                    string pName = p.ProcessName.ToLower();
+                    if (pName.Contains("snapmind") || pName.Contains("hotkey_hook") || pName.Contains("electron"))
+                    {
+                        _appPids.Add(pid);
+                        return true;
+                    }
                 }
             }
-        }
-        catch { }
+            catch { }
 
-        return false;
+            _nonAppPids.Add(pid);
+            return false;
+        }
     }
 
     public static string ReadClipboardDirect()
@@ -517,6 +540,14 @@ class NativeHotkeyHook
  
     public static void Main(string[] args)
     {
+        try
+        {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try { Console.Error.WriteLine("UNHANDLED: " + (e.ExceptionObject != null ? e.ExceptionObject.ToString() : "unknown")); } catch { }
+            };
+        }
+        catch { }
         if (args.Length > 0 && args[0] == "--release-modifiers")
         {
             ReleaseModifierKeys();
@@ -629,10 +660,17 @@ class NativeHotkeyHook
                         Console.WriteLine("COPY_COMPLETED");
                         Console.Out.Flush();
                     }
+                    else if (cmd == "QUIT" || cmd == "EXIT")
+                    {
+                        Application.Exit();
+                        break;
+                    }
                 }
-                Application.Exit();
             }
-            catch { Application.Exit(); }
+            catch (Exception ex)
+            {
+                try { Console.Error.WriteLine("STDIN_THREAD_ERR: " + ex.Message); } catch { }
+            }
         });
         stdinThread.IsBackground = true;
         stdinThread.Start();
@@ -727,30 +765,37 @@ class NativeHotkeyHook
 
     private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && _toolbarActive)
+        try
         {
-            int msg = wParam.ToInt32();
-            if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_NCLBUTTONDOWN || msg == WM_NCRBUTTONDOWN)
+            if (nCode >= 0 && _toolbarActive)
             {
-                // Grace period: ignore clicks within 200ms of toolbar activation
-                if (Environment.TickCount - _toolbarActivatedTimestamp > 200)
+                int msg = wParam.ToInt32();
+                if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN || msg == WM_NCLBUTTONDOWN || msg == WM_NCRBUTTONDOWN)
                 {
-                    try
+                    // Grace period: ignore clicks within 200ms of toolbar activation
+                    if (Environment.TickCount - _toolbarActivatedTimestamp > 200)
                     {
-                        MSLLHOOKSTRUCT mouseStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                        int clickX = mouseStruct.pt.x;
-                        int clickY = mouseStruct.pt.y;
-
-                        // Check if click is OUTSIDE the active toolbar bounds
-                        if (clickX < _tbX || clickX > (_tbX + _tbW) || clickY < _tbY || clickY > (_tbY + _tbH))
+                        try
                         {
-                            Console.WriteLine("CLICK_OUTSIDE_TOOLBAR");
-                            Console.Out.Flush();
+                            MSLLHOOKSTRUCT mouseStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                            int clickX = mouseStruct.pt.x;
+                            int clickY = mouseStruct.pt.y;
+
+                            // Check if click is OUTSIDE the active toolbar bounds
+                            if (clickX < _tbX || clickX > (_tbX + _tbW) || clickY < _tbY || clickY > (_tbY + _tbH))
+                            {
+                                Console.WriteLine("CLICK_OUTSIDE_TOOLBAR");
+                                Console.Out.Flush();
+                            }
                         }
+                        catch { }
                     }
-                    catch { }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            try { Console.Error.WriteLine("MOUSE_HOOK_ERR: " + ex.Message); } catch { }
         }
         return CallNextHookEx(_mouseHookID, nCode, wParam, lParam);
     }
@@ -870,64 +915,71 @@ class NativeHotkeyHook
 
     private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
+        try
         {
-            IntPtr curFg = GetForegroundWindow();
-            if (curFg != IntPtr.Zero && !IsAppWindow(curFg)) {
-                _lastTargetAppHwnd = curFg;
-            }
-
-            int vkCode = Marshal.ReadInt32(lParam);
-            Keys key = (Keys)vkCode;
-
-            // Check modifiers with physical left/right key state tolerance
-            bool isCtrl = (GetAsyncKeyState(0x11) & 0x8000) != 0 || 
-                          (GetAsyncKeyState(0xA2) & 0x8000) != 0 || 
-                          (GetAsyncKeyState(0xA3) & 0x8000) != 0;
-            bool isAlt = (GetAsyncKeyState(0x12) & 0x8000) != 0 || 
-                         (GetAsyncKeyState(0xA4) & 0x8000) != 0 || 
-                         (GetAsyncKeyState(0xA5) & 0x8000) != 0;
-            bool isShift = (GetAsyncKeyState(0x10) & 0x8000) != 0 || 
-                           (GetAsyncKeyState(0xA0) & 0x8000) != 0 || 
-                           (GetAsyncKeyState(0xA1) & 0x8000) != 0;
-
-            // 1. QUICK TEXT ASK: Ctrl + Caps Lock (VK_CAPITAL = 0x14)
-            bool isCaps = (key == Keys.Capital);
-            bool isQuickTextMatch = CheckComboMatch(_quickTextCombo, key, isCtrl, isAlt, isShift) ||
-                                   (isCaps && isCtrl && !isAlt && !isShift);
-
-            // Also check if CapsLock is physically held and Ctrl is pressed
-            if (!isQuickTextMatch && (key == Keys.ControlKey || key == Keys.LControlKey || key == Keys.RControlKey))
+            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
-                bool isCapsHeld = (GetAsyncKeyState(0x14) & 0x8000) != 0;
-                if (isCapsHeld && !isAlt && !isShift)
+                IntPtr curFg = GetForegroundWindow();
+                if (curFg != IntPtr.Zero && !IsAppWindow(curFg)) {
+                    _lastTargetAppHwnd = curFg;
+                }
+
+                int vkCode = Marshal.ReadInt32(lParam);
+                Keys key = (Keys)vkCode;
+
+                // Check modifiers with physical left/right key state tolerance
+                bool isCtrl = (GetAsyncKeyState(0x11) & 0x8000) != 0 || 
+                              (GetAsyncKeyState(0xA2) & 0x8000) != 0 || 
+                              (GetAsyncKeyState(0xA3) & 0x8000) != 0;
+                bool isAlt = (GetAsyncKeyState(0x12) & 0x8000) != 0 || 
+                             (GetAsyncKeyState(0xA4) & 0x8000) != 0 || 
+                             (GetAsyncKeyState(0xA5) & 0x8000) != 0;
+                bool isShift = (GetAsyncKeyState(0x10) & 0x8000) != 0 || 
+                               (GetAsyncKeyState(0xA0) & 0x8000) != 0 || 
+                               (GetAsyncKeyState(0xA1) & 0x8000) != 0;
+
+                // 1. QUICK TEXT ASK: Ctrl + Caps Lock (VK_CAPITAL = 0x14)
+                bool isCaps = (key == Keys.Capital);
+                bool isQuickTextMatch = CheckComboMatch(_quickTextCombo, key, isCtrl, isAlt, isShift) ||
+                                       (isCaps && isCtrl && !isAlt && !isShift);
+
+                // Also check if CapsLock is physically held and Ctrl is pressed
+                if (!isQuickTextMatch && (key == Keys.ControlKey || key == Keys.LControlKey || key == Keys.RControlKey))
                 {
-                    isQuickTextMatch = true;
+                    bool isCapsHeld = (GetAsyncKeyState(0x14) & 0x8000) != 0;
+                    if (isCapsHeld && !isAlt && !isShift)
+                    {
+                        isQuickTextMatch = true;
+                    }
+                }
+
+                if (isQuickTextMatch)
+                {
+                    FireQuickTextTrigger();
+                    // Suppress CapsLock toggle in Windows so CapsLock light does not flip!
+                    return (IntPtr)1;
+                }
+
+                // Ignore standalone modifier keydowns for snipping check
+                if (key == Keys.ControlKey || key == Keys.LControlKey || key == Keys.RControlKey ||
+                    key == Keys.ShiftKey || key == Keys.LShiftKey || key == Keys.RShiftKey ||
+                    key == Keys.Menu || key == Keys.LMenu || key == Keys.RMenu ||
+                    key == Keys.LWin || key == Keys.RWin)
+                {
+                    return CallNextHookEx(_hookID, nCode, wParam, lParam);
+                }
+
+                // 2. SCREEN SNIP & ASK: Alt + Shift + S (or custom snip combo)
+                bool isSnipMatch = CheckComboMatch(_snipCombo, key, isCtrl, isAlt, isShift);
+                if (isSnipMatch)
+                {
+                    FireSnipTrigger();
                 }
             }
-
-            if (isQuickTextMatch)
-            {
-                FireQuickTextTrigger();
-                // Suppress CapsLock toggle in Windows so CapsLock light does not flip!
-                return (IntPtr)1;
-            }
-
-            // Ignore standalone modifier keydowns for snipping check
-            if (key == Keys.ControlKey || key == Keys.LControlKey || key == Keys.RControlKey ||
-                key == Keys.ShiftKey || key == Keys.LShiftKey || key == Keys.RShiftKey ||
-                key == Keys.Menu || key == Keys.LMenu || key == Keys.RMenu ||
-                key == Keys.LWin || key == Keys.RWin)
-            {
-                return CallNextHookEx(_hookID, nCode, wParam, lParam);
-            }
-
-            // 2. SCREEN SNIP & ASK: Alt + Shift + S (or custom snip combo)
-            bool isSnipMatch = CheckComboMatch(_snipCombo, key, isCtrl, isAlt, isShift);
-            if (isSnipMatch)
-            {
-                FireSnipTrigger();
-            }
+        }
+        catch (Exception ex)
+        {
+            try { Console.Error.WriteLine("HOOK_ERR: " + ex.Message); } catch { }
         }
 
         return CallNextHookEx(_hookID, nCode, wParam, lParam);
