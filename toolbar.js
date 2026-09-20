@@ -56,19 +56,33 @@ if (window.electronAPI) {
     });
   }
 
+let isRenderScheduled = false;
+let lastMathRenderTime = 0;
+let hasInitialResized = false;
+
+function scheduleStreamRender() {
+  if (isRenderScheduled) return;
+  isRenderScheduled = true;
+  requestAnimationFrame(() => {
+    isRenderScheduled = false;
+    renderAnswerContent(quickAnswerStreamText, false);
+  });
+}
+
   if (window.electronAPI.onQuickAnswerChunk) {
     window.electronAPI.onQuickAnswerChunk((data) => {
       if (data && data.chunk) {
         quickAnswerStreamText += data.chunk;
-        renderAnswerContent(quickAnswerStreamText);
+        scheduleStreamRender();
       }
     });
   }
 
   if (window.electronAPI.onQuickAnswerFinish) {
     window.electronAPI.onQuickAnswerFinish((data) => {
+      isRenderScheduled = false;
       const final = (data && data.fullText) ? data.fullText : quickAnswerStreamText;
-      renderAnswerContent(final);
+      renderAnswerContent(final, true);
       const status = document.getElementById('quickAnswerStatus');
       if (status) {
         const sec = data?.durationSec || '';
@@ -310,6 +324,12 @@ function showQuickAnswerCard(badgeTitle) {
   const status = document.getElementById('quickAnswerStatus');
   const body = document.getElementById('quickAnswerBody');
 
+  // Reset high-performance stream rendering state
+  quickAnswerStreamText = '';
+  isRenderScheduled = false;
+  hasInitialResized = false;
+  lastMathRenderTime = 0;
+
   if (actionBadge) actionBadge.innerText = badgeTitle;
   if (status) status.innerText = 'กำลังประมวลผล...';
   if (body) {
@@ -333,6 +353,7 @@ function showQuickAnswerCard(badgeTitle) {
   if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
     window.electronAPI.resizeToolbarWindow({ height: 280 });
     window.electronAPI.resizeToolbarWindow({ height: 430 });
+    hasInitialResized = true;
   }
 }
 
@@ -403,7 +424,7 @@ function formatQuickTextMarkdown(rawText) {
   return rawText;
 }
 
-function renderAnswerContent(text) {
+function renderAnswerContent(text, isFinal = false) {
   const body = document.getElementById('quickAnswerBody');
   if (!body) return;
 
@@ -419,7 +440,11 @@ function renderAnswerContent(text) {
     body.innerText = formattedText || '';
   }
 
-  if (typeof renderMathInElement === 'function') {
+  // Throttled and conditional KaTeX math rendering: skips expensive DOM walking unless math symbols are present
+  const now = Date.now();
+  const hasMath = formattedText && (formattedText.includes('$') || formattedText.includes('\\(') || formattedText.includes('\\['));
+  if (typeof renderMathInElement === 'function' && hasMath && (isFinal || now - lastMathRenderTime > 250)) {
+    lastMathRenderTime = now;
     try {
       renderMathInElement(body, {
         delimiters: [
@@ -433,8 +458,9 @@ function renderAnswerContent(text) {
     } catch (e) {}
   }
 
-  // Ensure window height accommodates long answer content comfortably without cutting off
-  if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
+  // Avoid spamming IPC window resize on every stream chunk
+  if (!hasInitialResized && window.electronAPI && window.electronAPI.resizeToolbarWindow) {
+    hasInitialResized = true;
     window.electronAPI.resizeToolbarWindow({ height: 430 });
   }
 }

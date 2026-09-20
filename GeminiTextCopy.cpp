@@ -293,11 +293,11 @@ __declspec(dllexport) int __stdcall AutoCopySelectedTextUtf8(char* outBuffer, in
     if (!outBuffer || maxBytes <= 1) return 0;
     outBuffer[0] = '\0';
 
-    wchar_t wbuf[32768] = {};
-    int wlen = AutoCopySelectedTextW(wbuf, 32768, callerPid, targetHwnd);
+    std::vector<wchar_t> wbuf(maxBytes);
+    int wlen = AutoCopySelectedTextW(wbuf.data(), static_cast<int>(wbuf.size()), callerPid, targetHwnd);
     if (wlen <= 0) return 0;
 
-    int written = WideCharToMultiByte(CP_UTF8, 0, wbuf, wlen, outBuffer, maxBytes - 1, nullptr, nullptr);
+    int written = WideCharToMultiByte(CP_UTF8, 0, wbuf.data(), wlen, outBuffer, maxBytes - 1, nullptr, nullptr);
     if (written > 0) {
         outBuffer[written] = '\0';
         return written;
@@ -470,9 +470,13 @@ static volatile ULONGLONG g_toolbarActivatedTime = 0;
 
 static DWORD WINAPI QuickTextCaptureWorkerThread(LPVOID lpParam) {
     HWND targetWin = (HWND)lpParam;
-    char textBuf[32768] = {};
-    AutoCopySelectedTextUtf8(textBuf, sizeof(textBuf), g_callerPid, targetWin);
-    PushNativeEvent(2, textBuf); // 2 = EVENT_QUICK_TEXT
+    std::vector<char> textBuf(1048576, 0); // 1MB buffer for capturing large text selections
+    int written = AutoCopySelectedTextUtf8(textBuf.data(), static_cast<int>(textBuf.size()), g_callerPid, targetWin);
+    if (written > 0) {
+        PushNativeEvent(2, textBuf.data()); // 2 = EVENT_QUICK_TEXT
+    } else {
+        PushNativeEvent(2, "");
+    }
     return 0;
 }
 

@@ -2384,6 +2384,15 @@ ipcMain.handle('trigger-copy-and-get-text', async () => {
   }
 });
 
+function sanitizeAndOptimizeInputText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let clean = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  clean = clean.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  clean = clean.replace(/\n{3,}/g, '\n\n');
+  clean = clean.replace(/[ \t]+$/gm, '');
+  return clean.trim();
+}
+
 ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId }) => {
   // Restore original clipboard when user starts sending prompt to AI
   try {
@@ -2401,6 +2410,14 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId }) =
   const endpointsToTry = getCandidateEndpoints(selectedModel);
   const startTime = Date.now();
 
+  const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
+
+  // Fast-track thinking budget: force thinkingBudget: 0 for all flash models in quick text ask to achieve fastest TTFT
+  const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
+  const thinkingConf = isPro
+    ? getThinkingConfigForModel(selectedModel)
+    : { thinkingConfig: { thinkingBudget: 0 } };
+
   const requestPayload = {
     system_instruction: {
       parts: [
@@ -2411,14 +2428,14 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId }) =
       {
         role: 'user',
         parts: [
-          { text: promptText }
+          { text: optimizedPrompt }
         ]
       }
     ],
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 2048,
-      ...getThinkingConfigForModel(selectedModel)
+      ...thinkingConf
     }
   };
 
