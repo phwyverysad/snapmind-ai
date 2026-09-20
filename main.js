@@ -1901,24 +1901,24 @@ ipcMain.handle('crop-area', async (event, rect) => {
     const croppedSize = cropped.getSize();
     const pixelArea = croppedSize.width * croppedSize.height;
 
-    let maxDimension = 1024;
-    let jpegQuality = 74;
+    let maxDimension = 768;
+    let jpegQuality = 68;
 
     if (pixelArea <= 250000) {
       // Small crop (e.g. <= 500x500: single line, button, small word snippet)
-      // Extreme speed: ~12-20KB payload, single ViT tile, fastest upload and TTFT
-      maxDimension = 640;
-      jpegQuality = 70;
+      // Extreme speed: ~8-15KB payload, single ViT tile, fastest upload and TTFT
+      maxDimension = 512;
+      jpegQuality = 65;
     } else if (pixelArea <= 750000) {
       // Medium crop (e.g. <= 900x800: paragraph, code block, modal dialog)
-      // Balanced speed & sharpness: ~30-45KB payload
-      maxDimension = 896;
-      jpegQuality = 72;
+      // Balanced speed & sharpness: ~20-35KB payload
+      maxDimension = 768;
+      jpegQuality = 68;
     } else {
       // Large crop (full screen or large window)
-      // Maximum detail for dense text and multi-column layouts
-      maxDimension = 1024;
-      jpegQuality = 74;
+      // Good detail for dense text, but capped at 768px for speed
+      maxDimension = 768;
+      jpegQuality = 68;
     }
 
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
@@ -2145,25 +2145,23 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
   const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
   const endpointsToTry = getCandidateEndpoints(modelId);
   const startTime = Date.now();
-  const thinkingConf = getThinkingConfigForModel(modelId);
+  // Force thinkingBudget: 0 for screen vision streaming (eliminates 5-10s invisible reasoning delay)
+  // Vision tasks benefit from immediate output, not internal reasoning loops
+  const screenStreamThinkingConf = (modelId && modelId.includes('flash-lite'))
+    ? {}
+    : { thinkingConfig: { thinkingBudget: 0 } };
 
-  const unifiedPromptText = `วิเคราะห์ภาพหน้าจออย่างละเอียดและตอบให้ครบทุกหมวดหมู่สั้นกระชับ ชัดเจน ตามลำดับนี้:
-
+  const unifiedPromptText = `ตอบเร็วสั้นกระชับครบทุกหัวข้อ:
 ### [ANSWER]
-(คำตอบหลักที่ชัดเจน สั้นกระชับ ตรงประเด็นทันที หากมีโจทย์คำถามให้ตอบทันที หากมีสูตรคณิตศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$)
-
+คำตอบตรงประเด็น 1-3 ประโยค (สูตรคณิตศาสตร์ใช้ LaTeX $...$)
 ### [OCR]
-(ถอดข้อความตัวอักษรทุกภาษาและสัญลักษณ์ทั้งหมดในภาพต้นฉบับออกมาครบถ้วน 100% ห้ามตัดทอนหรือละทิ้งข้อความใดๆ คงระยะบรรทัดและหัวข้อย่อย หากไม่มีข้อความให้ระบุว่า "(ไม่มีข้อความในภาพ)")
-
+ถอดข้อความจากภาพครบถ้วนตามต้นฉบับ คงบรรทัดเดิม ถ้าไม่มีระบุ "(ไม่มีข้อความในภาพ)"
 ### [EXPLAIN]
-(คำอธิบายสั้นกระชับ ตรงจุด จัดย่อหน้าให้อ่านง่าย 2-3 บรรทัด)
-
+อธิบายสั้น 1-2 บรรทัด
 ### [SUMMARY]
-(สรุปประเด็นสำคัญเป็นข้อๆ ด้วย Markdown bullet points 1-3 ข้อ)
-
+สรุปประเด็นสำคัญ 1-3 ข้อสั้นๆ
 ### [TRANSLATE]
-(แปลเนื้อหาภาษาต่างประเทศทั้งหมดในภาพออกมาเป็นภาษาไทยโดยตรง แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำภาษาอังกฤษมาแสดงซ้ำ แปลตรงตัว 100% คงโครงสร้างการจัดวางเดิมไว้)
-`;
+แปลเนื้อหาภาษาต่างประเทศเป็นไทยตรงตัว สั้นกระชับ`;
 
   const payload = {
     contents: [
@@ -2176,8 +2174,8 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 4096,
-      ...thinkingConf
+      maxOutputTokens: 1200,
+      ...screenStreamThinkingConf
     }
   };
 
