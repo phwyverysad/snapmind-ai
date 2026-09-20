@@ -4,11 +4,21 @@ node_modules/
 # Production build outputs
 dist/
 
-# C/C++ compiled binaries & object files
+# Test files & test scripts
+test_*
+test/
+tests/
+run_all_tests.js
+
+# Scratch & miscellaneous documentation
+เครื่องมือ.txt
+*.txt
+
+# C/C++ compiled binaries & intermediate files
 *.obj
 *.exp
 *.lib
-test_*.exe
+*.exe
 
 # Logs & Temporary files
 *.log
