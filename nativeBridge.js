@@ -142,11 +142,11 @@ function makeWindowTopmostNative(win, bounds = null) {
   try {
     const hwndBuf = win.getNativeWindowHandle();
     if (hwndBuf && hwndBuf.length >= 4) {
+      const hwnd = (hwndBuf.length >= 8) ? hwndBuf.readBigInt64LE(0) : hwndBuf.readInt32LE(0);
       if (isLoaded || initNativeBridge()) {
-        if (fnMakeWindowTopmost) fnMakeWindowTopmost(hwndBuf);
+        if (fnMakeWindowTopmost) fnMakeWindowTopmost(hwnd);
       }
       if (initGdiCapture() && fnSetWindowPos) {
-        const hwnd = (hwndBuf.length >= 8) ? hwndBuf.readBigInt64LE(0) : hwndBuf.readInt32LE(0);
         if (bounds) {
           // HWND_TOPMOST = -1, SWP_SHOWWINDOW = 0x0040
           fnSetWindowPos(hwnd, -1, Math.round(bounds.x), Math.round(bounds.y), Math.round(bounds.width), Math.round(bounds.height), 0x0040);
@@ -458,36 +458,31 @@ function captureScreenFreezeNative() {
   }
 }
 
-function cropFreezeImageNative(freezeSnapshot, rect) {
+function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
   if (!freezeSnapshot || !freezeSnapshot.nativeImage) return null;
   try {
     const img = freezeSnapshot.nativeImage;
     const size = img.getSize();
-    const x = Math.max(0, Math.min(size.width - 1, Math.round(rect.x)));
-    const y = Math.max(0, Math.min(size.height - 1, Math.round(rect.y)));
-    const w = Math.max(1, Math.min(size.width - x, Math.round(rect.w)));
-    const h = Math.max(1, Math.min(size.height - y, Math.round(rect.h)));
+
+    let scaleX = 1;
+    let scaleY = 1;
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      scaleX = size.width / bounds.width;
+      scaleY = size.height / bounds.height;
+    }
+
+    const x = Math.max(0, Math.min(size.width - 1, Math.round(rect.x * scaleX)));
+    const y = Math.max(0, Math.min(size.height - 1, Math.round(rect.y * scaleY)));
+    const w = Math.max(1, Math.min(size.width - x, Math.round(rect.w * scaleX)));
+    const h = Math.max(1, Math.min(size.height - y, Math.round(rect.h * scaleY)));
     const cropped = img.crop({ x, y, width: w, height: h });
     if (cropped.isEmpty()) return null;
 
-    // Adaptive Vision Downscaling for Ultra-Fast Gemini TTFT
+    // High-Resolution Vision Clarity & Crisp Quality
     let processedImg = cropped;
     const croppedSize = cropped.getSize();
-    const pixelArea = croppedSize.width * croppedSize.height;
-
-    let maxDimension = 768;
-    let jpegQuality = 68;
-
-    if (pixelArea <= 250000) {
-      maxDimension = 512;
-      jpegQuality = 65;
-    } else if (pixelArea <= 750000) {
-      maxDimension = 768;
-      jpegQuality = 68;
-    } else {
-      maxDimension = 768;
-      jpegQuality = 68;
-    }
+    const maxDimension = 1536;
+    const jpegQuality = 85;
 
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
       let newW, newH;

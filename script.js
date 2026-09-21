@@ -462,21 +462,40 @@ async function initApp() {
 window.addEventListener('load', initApp);
 window.addEventListener('resize', resizeCanvasToVirtualScreen);
 
-function resizeCanvasToVirtualScreen() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
+function resizeCanvasToVirtualScreen(bounds = null) {
+  let targetW = (bounds && typeof bounds.width === 'number' && bounds.width > 0) ? bounds.width : window.innerWidth;
+  let targetH = (bounds && typeof bounds.height === 'number' && bounds.height > 0) ? bounds.height : window.innerHeight;
+
+  if (window.screen && typeof window.screen.width === 'number' && typeof window.screen.height === 'number') {
+    targetW = Math.max(targetW, window.screen.width);
+    targetH = Math.max(targetH, window.screen.height);
+  }
+
+  targetW = Math.ceil(targetW);
+  targetH = Math.ceil(targetH);
+
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+    canvas.style.width = targetW + 'px';
+    canvas.style.height = targetH + 'px';
   }
   drawScene();
 
-  if (window.electronAPI && window.electronAPI.getDisplayBounds) {
-    window.electronAPI.getDisplayBounds().then(bounds => {
-      if (bounds && (canvas.width !== bounds.width || canvas.height !== bounds.height)) {
-        canvas.width = bounds.width;
-        canvas.height = bounds.height;
-        drawScene();
+  if (!bounds && window.electronAPI && window.electronAPI.getDisplayBounds) {
+    window.electronAPI.getDisplayBounds().then(b => {
+      if (b) {
+        let bw = Math.max(b.width, (window.screen && window.screen.width) || b.width);
+        let bh = Math.max(b.height, (window.screen && window.screen.height) || b.height);
+        bw = Math.ceil(bw);
+        bh = Math.ceil(bh);
+        if (canvas.width !== bw || canvas.height !== bh) {
+          canvas.width = bw;
+          canvas.height = bh;
+          canvas.style.width = bw + 'px';
+          canvas.style.height = bh + 'px';
+          drawScene();
+        }
       }
     }).catch(() => {});
   }
@@ -564,7 +583,8 @@ function setupElectronListeners() {
 }
 
 // --- SNIPPING UI CONTROLLER ---
-function startSnippingUI(initialFrames) {
+function startSnippingUI() {
+  const bounds = arguments[0] || null;
   document.body.classList.add('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
@@ -592,25 +612,16 @@ function startSnippingUI(initialFrames) {
   }
 
   canvas.style.display = 'block';
+  canvas.style.backgroundImage = 'none';
   setCanvasCursor('crosshair');
   if (topHint) topHint.style.display = 'none';
   if (percentBadge) percentBadge.style.display = 'none';
 
   freezeFrames = [];
-  if (initialFrames && Array.isArray(initialFrames) && initialFrames.length > 0) {
-    handleFreezeScreenSnapshot(initialFrames);
-  } else if (window.electronAPI && window.electronAPI.getFreezeScreenFrames) {
-    window.electronAPI.getFreezeScreenFrames().then(frames => {
-      if (isSnippingActive && frames && frames.length > 0 && freezeFrames.length === 0) {
-        handleFreezeScreenSnapshot(frames);
-      }
-    }).catch(() => {});
-  }
-
   if (window.electronAPI) {
     window.electronAPI.setIgnoreMouseEvents(false);
   }
-  resizeCanvasToVirtualScreen();
+  resizeCanvasToVirtualScreen(bounds);
 }
 
 function cancelSnippingUI(fromMain = false) {
@@ -659,43 +670,18 @@ const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http
 let freezeFrames = [];
 
 function handleFreezeScreenSnapshot(frames) {
-  if (!frames || !Array.isArray(frames) || frames.length === 0) return;
-  freezeFrames = [];
-  frames.forEach(f => {
-    if (!f.dataUrl) return;
-
-    // Set immediate CSS background for instant 0ms visual rendering while Image element decodes
-    if (canvas && f.dataUrl) {
-      canvas.style.backgroundImage = `url("${f.dataUrl}")`;
-      canvas.style.backgroundSize = '100% 100%';
-      canvas.style.backgroundRepeat = 'no-repeat';
-      canvas.style.backgroundPosition = '0 0';
-    }
-
-    const img = new Image();
-    const frameObj = {
-      img,
-      x: typeof f.x === 'number' ? f.x : 0,
-      y: typeof f.y === 'number' ? f.y : 0,
-      width: typeof f.width === 'number' ? f.width : window.innerWidth,
-      height: typeof f.height === 'number' ? f.height : window.innerHeight
-    };
-    img.onload = () => {
-      requestDrawScene();
-    };
-    if (typeof img.decode === 'function') {
-      img.decode().then(() => requestDrawScene()).catch(() => {});
-    }
-    img.src = f.dataUrl;
-    freezeFrames.push(frameObj);
-  });
+  if (canvas) {
+    canvas.style.backgroundImage = 'none';
+  }
   requestDrawScene();
 }
 
 function setCanvasCursor(newCursor) {
   const targetCursor = (newCursor === 'crosshair') ? SNIP_CLEAN_CROSSHAIR_CURSOR : newCursor;
-  if (canvas && canvas.style.cursor !== targetCursor) {
-    canvas.style.cursor = targetCursor;
+  if (canvas && canvas.style.cursor !== newCursor) {
+    if (canvas.style.cursor !== targetCursor) {
+      canvas.style.cursor = targetCursor;
+    }
   }
 }
 
@@ -895,53 +881,47 @@ function isInsideBox(mx, my) {
 function drawScene() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (isSnippingActive || isLaserScanning || box.w > 0) {
-    // 1. Draw freeze frame background overlay if captured
-    let hasDrawnImage = false;
-    if (freezeFrames && freezeFrames.length > 0) {
-      freezeFrames.forEach(f => {
-        if (f.img && f.img.complete && f.img.naturalWidth > 0) {
-          ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
-          hasDrawnImage = true;
-        }
-      });
-    }
+  if (!isSnippingActive && !isLaserScanning && box.w === 0) {
+    return;
+  }
 
-    // 2. Dark tint overlay across canvas (sleek soft dark minimalist tone, slightly brighter)
-    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+  // 1. Stable, uniform dark dim overlay strictly on the unselected region
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+
+  if (box.w > 0 && box.h > 0) {
+    // Cut out the selected crop box using evenodd fill rule.
+    // The outer rect covers the entire canvas (including full taskbar height).
+    // The inner rect creates a 100% transparent cutout hole with 0 alpha.
+    // Inside this cutout box, the user's native screen shows through with:
+    // - 100% original color fidelity (not dark, not faded)
+    // - 100% native sharpness (no blur, no DPI compression artifacts)
+    // - Zero filter or opacity covering the selected region
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.fill('evenodd');
+  } else {
+    // When no selection box is active yet, darken the entire screen uniformly
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.restore();
 
-    // 3. Highlighted frozen screen inside crop box
-    if (box.w > 0 && box.h > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(box.x, box.y, box.w, box.h);
-      ctx.clip();
+  // 2. Crisp dashed selection border around the cut-out box matching Image 3
+  if (box.w > 0 && box.h > 0) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(box.x, box.y, box.w, box.h);
+    ctx.restore();
 
-      if (freezeFrames && freezeFrames.length > 0) {
-        freezeFrames.forEach(f => {
-          if (f.img && f.img.complete && f.img.naturalWidth > 0) {
-            ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
-          } else {
-            ctx.clearRect(box.x, box.y, box.w, box.h);
-          }
-        });
-      } else {
-        ctx.clearRect(box.x, box.y, box.w, box.h);
-      }
-      ctx.restore();
-
-      // 4. Image 3 Clean dashed border (crisp white dashed line with soft shadow)
-      ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
-      ctx.shadowBlur = 2;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
-      ctx.restore();
+    if (!isDrawing) {
+        drawInteractiveHandles(box.x, box.y, box.w, box.h);
     }
   }
 }

@@ -1201,11 +1201,19 @@ function getCombinedDisplaysBounds() {
     if (y + height > maxY) maxY = y + height;
   });
 
+  const primary = screen.getPrimaryDisplay();
+  if (primary && primary.bounds) {
+    if (primary.bounds.x < minX) minX = primary.bounds.x;
+    if (primary.bounds.y < minY) minY = primary.bounds.y;
+    if (primary.bounds.x + primary.bounds.width > maxX) maxX = primary.bounds.x + primary.bounds.width;
+    if (primary.bounds.y + primary.bounds.height > maxY) maxY = primary.bounds.y + primary.bounds.height;
+  }
+
   return {
     x: minX,
     y: minY,
-    width: maxX - minX,
-    height: maxY - minY
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY)
   };
 }
 
@@ -1368,31 +1376,24 @@ function startSnippingMode() {
   }
   unregisterToolbarShortcuts();
 
-  // Instant GDI Screen Capture BEFORE showing window (guarantees desktop is frozen immediately with 0 visual flicker)
-  let initialFreezeFrames = [];
+  // Instant GDI Screen Freeze Capture into memory (< 10ms, 100% pristine screen view)
   try {
     if (nativeBridge && nativeBridge.captureScreenFreezeNative) {
       const gdiRes = nativeBridge.captureScreenFreezeNative();
-      if (gdiRes && gdiRes.frame) {
+      if (gdiRes && gdiRes.nativeImage) {
         currentFreezeSnapshot = gdiRes;
-        initialFreezeFrames = [gdiRes.frame];
       }
     }
   } catch (gdiErr) {
     console.warn('[Fast GDI Snipping Pre-capture Warning]', gdiErr.message);
   }
 
-  // Ultra-speed background tasks: prewarm connection and fallback pre-capture
+  // Ultra-speed background tasks: prewarm connection and pre-capture desktop sources
   setImmediate(() => {
     preCaptureDesktopSources();
+  });
+  setImmediate(() => {
     prewarmGeminiConnection();
-    if (initialFreezeFrames.length === 0) {
-      captureScreenFreezeFrames().then(frames => {
-        if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive && frames && frames.length > 0) {
-          mainWindow.webContents.send('freeze-screen-snapshot', frames);
-        }
-      }).catch(() => {});
-    }
   });
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1411,8 +1412,14 @@ function startSnippingMode() {
   // Instant 0ms presentation without latency while keeping frame synchronization
   mainWindow.show();
   mainWindow.focus();
-  mainWindow.setBounds(bounds);
+
+  const curBounds = mainWindow.getBounds();
+  if (curBounds.x !== bounds.x || curBounds.y !== bounds.y || curBounds.width !== bounds.width || curBounds.height !== bounds.height) {
+    mainWindow.setBounds(bounds);
+  }
+
   if (nativeBridge && nativeBridge.makeWindowTopmostNative) {
+    nativeBridge.makeWindowTopmostNative(mainWindow);
     nativeBridge.makeWindowTopmostNative(mainWindow, bounds);
   }
   setTimeout(() => {
@@ -1450,14 +1457,15 @@ function startSnippingMode() {
         histModal.style.opacity = '0';
       }
       const scanCanvas = document.getElementById('scanCanvas');
-      if (scanCanvas) scanCanvas.style.display = 'block';
+      if (scanCanvas) {
+        scanCanvas.style.display = 'block';
+        scanCanvas.style.backgroundImage = 'none';
+      }
     `).catch(() => {});
   } catch (e) {}
 
-  mainWindow.webContents.send('start-snipping', initialFreezeFrames);
-  if (initialFreezeFrames.length > 0) {
-    mainWindow.webContents.send('freeze-screen-snapshot', initialFreezeFrames);
-  }
+  mainWindow.webContents.send('start-snipping');
+  mainWindow.webContents.send('start-snipping', bounds);
 
   // Dynamically register Escape key ONLY while in snipping mode
   try {
@@ -1883,10 +1891,12 @@ ipcMain.handle('write-clipboard-text', (event, text) => {
 
 // Multi-Monitor Aware Screen Cropping & Image Optimization
 ipcMain.handle('crop-area', async (event, rect) => {
+  const combinedBounds = getCombinedDisplaysBounds();
+
   // Ultra-fast path: Crop directly from in-memory frozen GDI desktop image (< 1ms)
   if (currentFreezeSnapshot && currentFreezeSnapshot.nativeImage && nativeBridge && nativeBridge.cropFreezeImageNative) {
     try {
-      const croppedDataUrl = nativeBridge.cropFreezeImageNative(currentFreezeSnapshot, rect);
+      const croppedDataUrl = nativeBridge.cropFreezeImageNative(currentFreezeSnapshot, rect, combinedBounds);
       if (croppedDataUrl) {
         return croppedDataUrl;
       }
@@ -1894,8 +1904,6 @@ ipcMain.handle('crop-area', async (event, rect) => {
       console.warn('[Crop Area Native Fallback]', cropNativeErr.message);
     }
   }
-
-  const combinedBounds = getCombinedDisplaysBounds();
   const displays = screen.getAllDisplays();
 
   if (!displays || displays.length === 0) {
@@ -2282,15 +2290,15 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     ? {}
     : { thinkingConfig: { thinkingBudget: 0 } };
 
-  const unifiedPromptText = `ตอบเร็วสั้นกระชับครบทุกหัวข้อ:
+  const unifiedPromptText = `ตอบเร็วชัดเจนครบถ้วนทุกหัวข้อ:
 ### [ANSWER]
-คำตอบตรงประเด็น 1-3 ประโยค (สูตรคณิตศาสตร์ใช้ LaTeX $...$)
+ตอบตรงประเด็นทันที หากภาพมีหลายข้อคำถามหรือหลายประเด็น ให้ตอบครบถ้วนทุกข้อตามลำดับ (ข้อ 1, ข้อ 2, ...) อย่างละเอียดถูกต้อง (สูตรคณิตศาสตร์ใช้ LaTeX $...$)
 ### [OCR]
 ถอดข้อความจากภาพครบถ้วนตามต้นฉบับ คงบรรทัดเดิม ถ้าไม่มีระบุ "(ไม่มีข้อความในภาพ)"
 ### [EXPLAIN]
-อธิบายสั้น 1-2 บรรทัด
+อธิบายเนื้อหา หลักการ และเหตุผลอย่างชัดเจนเข้าใจง่าย
 ### [SUMMARY]
-สรุปประเด็นสำคัญ 1-3 ข้อสั้นๆ
+สรุปประเด็นสำคัญเป็นข้อๆ สั้นกระชับ
 ### [TRANSLATE]
 แปลเนื้อหาภาษาต่างประเทศเป็นไทยตรงตัว สั้นกระชับ`;
 
@@ -2305,7 +2313,7 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
     ],
     generationConfig: {
       temperature: 0.0,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 4096,
       ...screenStreamThinkingConf
     }
   };
@@ -2549,9 +2557,9 @@ ipcMain.handle('save-image-file', async (event, { dataUrl, defaultFilename }) =>
 
 // --- QUICK TEXT ASK & CUSTOM PROMPTS IPC HANDLERS ---
 const CATEGORY_SYSTEM_INSTRUCTIONS = {
-  answer: "ตอบตรงประเด็นทันที ถูกต้อง ชัดเจน ไม่ทักทาย โจทย์ปัญหาให้แสดงขั้นตอนและคำตอบด้วย Markdown",
+  answer: "ตอบตรงประเด็นทันที ถูกต้อง ชัดเจน ไม่ทักทาย หากมีหลายข้อคำถามหรือหลายประเด็น ให้ตอบครบถ้วนทุกข้อตามลำดับอย่างละเอียดและถูกต้อง โจทย์ปัญหาให้แสดงขั้นตอนและคำตอบด้วย Markdown สูตรคณิตศาสตร์ใช้ LaTeX $...$",
 
-  explain: "อธิบายสั้นกระชับ เข้าใจง่าย ตรงประเด็น ใช้ bullet points ไม่ทักทาย",
+  explain: "อธิบายชัดเจน ครบถ้วน ตรงประเด็น ใช้ bullet points และแยกหัวข้อย่อยหากมีหลายประเด็น ไม่ทักทาย",
 
   summarize: "สรุปประเด็นสำคัญกระชับเป็นข้อๆ ด้วย bullet points ทันที ไม่ทักทาย",
 
@@ -2567,20 +2575,20 @@ const CATEGORY_SYSTEM_INSTRUCTIONS = {
 
   define: "อธิบายว่าคืออะไร ความหมาย หลักการ สรุปกระชับตรงประเด็น ไม่ทักทาย",
 
-  custom_ask: "ตอบตามคำสั่งผู้ใช้ ถูกต้อง ตรงประเด็นทันที ไม่ทักทาย"
+  custom_ask: "ตอบตามคำสั่งผู้ใช้อย่างครบถ้วน ถูกต้อง ชัดเจน ตรงประเด็นทันที หากมีหลายคำถามให้ตอบครบทุกข้อตามลำดับ ไม่ทักทาย"
 };
 
 const CATEGORY_MAX_OUTPUT_TOKENS = {
-  shorten: 384,
-  define: 384,
-  translate_th: 512,
-  summarize: 512,
-  answer: 768,
-  ocr: 768,
-  proofread: 768,
-  explain: 1024,
-  continue_writing: 1024,
-  custom_ask: 1024
+  shorten: 1024,
+  define: 1024,
+  translate_th: 4096,
+  summarize: 2048,
+  answer: 4096,
+  ocr: 4096,
+  proofread: 2048,
+  explain: 4096,
+  continue_writing: 4096,
+  custom_ask: 4096
 };
 
 function resolveQuickTextCategory(promptId, promptText) {

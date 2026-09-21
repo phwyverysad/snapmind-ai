@@ -652,11 +652,13 @@ function renderAnswerContent(text, isFinal = false) {
     if (html === lastRenderedHtml) return;
     lastRenderedHtml = html;
     body.innerHTML = html;
+    body.scrollTop = body.scrollHeight;
   } else if (!shouldFullParse) {
     // Skip redundant full AST re-parse on micro-interim frames
     return;
   } else {
     body.innerText = formattedText || '';
+    body.scrollTop = body.scrollHeight;
   }
 
   // Throttled and conditional KaTeX math rendering: skips expensive DOM walking unless math symbols are present
