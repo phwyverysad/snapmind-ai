@@ -67,7 +67,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveImageFile: (dataUrl, defaultFilename) => ipcRenderer.invoke('save-image-file', { dataUrl, defaultFilename }),
 
   // Event Listeners
-  onStartSnipping: (callback) => ipcRenderer.on('start-snipping', () => callback()),
+  onStartSnipping: (callback) => ipcRenderer.on('start-snipping', (event, frames) => callback(frames)),
   onCancelSnipping: (callback) => ipcRenderer.on('cancel-snipping-ui', () => callback()),
   onOpenSettings: (callback) => ipcRenderer.on('open-settings-ui', () => callback()),
   onOpenHistory: (callback) => ipcRenderer.on('open-history-ui', () => callback()),

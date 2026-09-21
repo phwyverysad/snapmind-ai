@@ -291,6 +291,179 @@ function stopHookPolling() {
   }
 }
 
+// === HIGH-SPEED WIN32 GDI SCREEN CAPTURE & CROPPING ===
+let user32Lib = null;
+let gdi32Lib = null;
+let fnGetDC = null;
+let fnReleaseDC = null;
+let fnGetSystemMetrics = null;
+let fnCreateCompatibleDC = null;
+let fnDeleteDC = null;
+let fnDeleteObject = null;
+let fnSelectObject = null;
+let fnBitBlt = null;
+let fnCreateCompatibleBitmap = null;
+let fnGetDIBits = null;
+let BITMAPINFOHEADER = null;
+let electronNativeImage = null;
+
+function initGdiCapture() {
+  if (fnBitBlt && fnGetDIBits) return true;
+  if (!koffi) {
+    try {
+      koffi = require('koffi');
+    } catch (e) {
+      return false;
+    }
+  }
+  try {
+    if (!user32Lib) user32Lib = koffi.load('user32.dll');
+    if (!gdi32Lib) gdi32Lib = koffi.load('gdi32.dll');
+
+    if (!fnGetDC) fnGetDC = user32Lib.func('intptr_t __stdcall GetDC(intptr_t hWnd)');
+    if (!fnReleaseDC) fnReleaseDC = user32Lib.func('int __stdcall ReleaseDC(intptr_t hWnd, intptr_t hDC)');
+    if (!fnGetSystemMetrics) fnGetSystemMetrics = user32Lib.func('int __stdcall GetSystemMetrics(int nIndex)');
+
+    if (!fnCreateCompatibleDC) fnCreateCompatibleDC = gdi32Lib.func('intptr_t __stdcall CreateCompatibleDC(intptr_t hDC)');
+    if (!fnDeleteDC) fnDeleteDC = gdi32Lib.func('int __stdcall DeleteDC(intptr_t hDC)');
+    if (!fnDeleteObject) fnDeleteObject = gdi32Lib.func('int __stdcall DeleteObject(intptr_t hObject)');
+    if (!fnSelectObject) fnSelectObject = gdi32Lib.func('intptr_t __stdcall SelectObject(intptr_t hDC, intptr_t hObject)');
+    if (!fnBitBlt) fnBitBlt = gdi32Lib.func('int __stdcall BitBlt(intptr_t hdcDest, int nXDest, int nYDest, int nWidth, int nHeight, intptr_t hdcSrc, int nXSrc, int nYSrc, uint32_t dwRop)');
+    if (!fnCreateCompatibleBitmap) fnCreateCompatibleBitmap = gdi32Lib.func('intptr_t __stdcall CreateCompatibleBitmap(intptr_t hDC, int cx, int cy)');
+
+    if (!BITMAPINFOHEADER) {
+      BITMAPINFOHEADER = koffi.struct('BITMAPINFOHEADER', {
+        biSize: 'uint32',
+        biWidth: 'int32',
+        biHeight: 'int32',
+        biPlanes: 'uint16',
+        biBitCount: 'uint16',
+        biCompression: 'uint32',
+        biSizeImage: 'uint32',
+        biXPelsPerMeter: 'int32',
+        biYPelsPerMeter: 'int32',
+        biClrUsed: 'uint32',
+        biClrImportant: 'uint32'
+      });
+    }
+
+    if (!fnGetDIBits) {
+      fnGetDIBits = gdi32Lib.func('int __stdcall GetDIBits(intptr_t hdc, intptr_t hbm, uint32_t start, uint32_t cLines, _Out_ uint8_t *lpvBits, _Inout_ BITMAPINFOHEADER *lpbmi, uint32_t usage)');
+    }
+    return true;
+  } catch (err) {
+    console.warn('[NativeBridge] Failed to load GDI screen capture APIs:', err.message);
+    return false;
+  }
+}
+
+function captureScreenFreezeNative() {
+  if (!initGdiCapture()) return null;
+  const t0 = Date.now();
+  try {
+    const vx = fnGetSystemMetrics(76); // SM_XVIRTUALSCREEN
+    const vy = fnGetSystemMetrics(77); // SM_YVIRTUALSCREEN
+    const vw = fnGetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+    const vh = fnGetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+
+    if (vw <= 0 || vh <= 0) return null;
+
+    const hdcScreen = fnGetDC(0);
+    if (!hdcScreen) return null;
+
+    const hdcMem = fnCreateCompatibleDC(hdcScreen);
+    if (!hdcMem) {
+      fnReleaseDC(0, hdcScreen);
+      return null;
+    }
+
+    const hBitmap = fnCreateCompatibleBitmap(hdcScreen, vw, vh);
+    if (!hBitmap) {
+      fnDeleteDC(hdcMem);
+      fnReleaseDC(0, hdcScreen);
+      return null;
+    }
+
+    const hOld = fnSelectObject(hdcMem, hBitmap);
+    const SRCCOPY = 0x00CC0020;
+    fnBitBlt(hdcMem, 0, 0, vw, vh, hdcScreen, vx, vy, SRCCOPY);
+    fnSelectObject(hdcMem, hOld);
+
+    const bmi = {
+      biSize: 40,
+      biWidth: vw,
+      biHeight: -vh, // top-down BGRA
+      biPlanes: 1,
+      biBitCount: 32,
+      biCompression: 0,
+      biSizeImage: vw * vh * 4,
+      biXPelsPerMeter: 0,
+      biYPelsPerMeter: 0,
+      biClrUsed: 0,
+      biClrImportant: 0
+    };
+
+    const buf = Buffer.alloc(vw * vh * 4);
+    fnGetDIBits(hdcMem, hBitmap, 0, vh, buf, bmi, 0);
+
+    fnDeleteObject(hBitmap);
+    fnDeleteDC(hdcMem);
+    fnReleaseDC(0, hdcScreen);
+
+    if (!electronNativeImage) {
+      try {
+        electronNativeImage = require('electron').nativeImage;
+      } catch (e) {}
+    }
+
+    if (!electronNativeImage) return null;
+
+    const img = electronNativeImage.createFromBitmap(buf, { width: vw, height: vh });
+    if (!img || img.isEmpty()) return null;
+
+    const jpegBuf = img.toJPEG(82);
+    const dataUrl = 'data:image/jpeg;base64,' + jpegBuf.toString('base64');
+    const elapsedMs = Date.now() - t0;
+
+    return {
+      bounds: { x: vx, y: vy, width: vw, height: vh },
+      nativeImage: img,
+      dataUrl,
+      frame: {
+        displayId: 'virtual-screen',
+        x: 0,
+        y: 0,
+        width: vw,
+        height: vh,
+        dataUrl
+      },
+      elapsedMs
+    };
+  } catch (e) {
+    console.warn('[NativeBridge] captureScreenFreezeNative error:', e.message);
+    return null;
+  }
+}
+
+function cropFreezeImageNative(freezeSnapshot, rect) {
+  if (!freezeSnapshot || !freezeSnapshot.nativeImage) return null;
+  try {
+    const img = freezeSnapshot.nativeImage;
+    const size = img.getSize();
+    const x = Math.max(0, Math.min(size.width - 1, Math.round(rect.x)));
+    const y = Math.max(0, Math.min(size.height - 1, Math.round(rect.y)));
+    const w = Math.max(1, Math.min(size.width - x, Math.round(rect.w)));
+    const h = Math.max(1, Math.min(size.height - y, Math.round(rect.h)));
+    const cropped = img.crop({ x, y, width: w, height: h });
+    if (!cropped.isEmpty()) {
+      return 'data:image/jpeg;base64,' + cropped.toJPEG(90).toString('base64');
+    }
+  } catch (e) {
+    console.warn('[NativeBridge] cropFreezeImageNative error:', e.message);
+  }
+  return null;
+}
+
 module.exports = {
   initNativeBridge,
   isDllAvailable,
@@ -306,5 +479,8 @@ module.exports = {
   simulateHotkeyTrigger,
   pollHotkeyEventNative,
   startHookPolling,
-  stopHookPolling
+  stopHookPolling,
+  initGdiCapture,
+  captureScreenFreezeNative,
+  cropFreezeImageNative
 };

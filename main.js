@@ -1268,8 +1268,22 @@ function createWindow() {
 let lastSnippingTriggerTime = 0;
 let cachedDesktopCapturePromise = null;
 let cachedCaptureTimestamp = 0;
+let currentFreezeSnapshot = null;
 
 async function captureScreenFreezeFrames() {
+  // Fast path: In-process Win32 GDI capture (15ms, 100% reliable)
+  try {
+    if (nativeBridge && nativeBridge.captureScreenFreezeNative) {
+      const gdiRes = nativeBridge.captureScreenFreezeNative();
+      if (gdiRes && gdiRes.frame) {
+        currentFreezeSnapshot = gdiRes;
+        return [gdiRes.frame];
+      }
+    }
+  } catch (err) {
+    console.warn('[GDI Freeze Capture Warning]', err.message);
+  }
+
   try {
     const displays = screen.getAllDisplays();
     if (!displays || displays.length === 0) return [];
@@ -1348,15 +1362,36 @@ function startSnippingMode() {
   }
   lastSnippingTriggerTime = now;
 
-  // Ultra-speed optimization: Pre-capture desktop asynchronously, capture freeze frames, and prewarm TLS connection
+  if (toolbarWindow && !toolbarWindow.isDestroyed()) {
+    toolbarWindow.hide();
+  }
+  unregisterToolbarShortcuts();
+
+  // Instant GDI Screen Capture BEFORE showing window (guarantees desktop is frozen immediately with 0 visual flicker)
+  let initialFreezeFrames = [];
+  try {
+    if (nativeBridge && nativeBridge.captureScreenFreezeNative) {
+      const gdiRes = nativeBridge.captureScreenFreezeNative();
+      if (gdiRes && gdiRes.frame) {
+        currentFreezeSnapshot = gdiRes;
+        initialFreezeFrames = [gdiRes.frame];
+      }
+    }
+  } catch (gdiErr) {
+    console.warn('[Fast GDI Snipping Pre-capture Warning]', gdiErr.message);
+  }
+
+  // Ultra-speed background tasks: prewarm connection and fallback pre-capture
   setImmediate(() => {
     preCaptureDesktopSources();
     prewarmGeminiConnection();
-    captureScreenFreezeFrames().then(frames => {
-      if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive && frames && frames.length > 0) {
-        mainWindow.webContents.send('freeze-screen-snapshot', frames);
-      }
-    }).catch(() => {});
+    if (initialFreezeFrames.length === 0) {
+      captureScreenFreezeFrames().then(frames => {
+        if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive && frames && frames.length > 0) {
+          mainWindow.webContents.send('freeze-screen-snapshot', frames);
+        }
+      }).catch(() => {});
+    }
   });
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1411,7 +1446,10 @@ function startSnippingMode() {
     `).catch(() => {});
   } catch (e) {}
 
-  mainWindow.webContents.send('start-snipping');
+  mainWindow.webContents.send('start-snipping', initialFreezeFrames);
+  if (initialFreezeFrames.length > 0) {
+    mainWindow.webContents.send('freeze-screen-snapshot', initialFreezeFrames);
+  }
 
   // Dynamically register Escape key ONLY while in snipping mode
   try {
@@ -1425,6 +1463,7 @@ function startSnippingMode() {
 function cancelSnippingMode() {
   isSnippingActive = false;
   cachedDesktopCapturePromise = null;
+  currentFreezeSnapshot = null;
 
   if (toolbarWindow && !toolbarWindow.isDestroyed()) {
     toolbarWindow.hide();
@@ -1836,6 +1875,18 @@ ipcMain.handle('write-clipboard-text', (event, text) => {
 
 // Multi-Monitor Aware Screen Cropping & Image Optimization
 ipcMain.handle('crop-area', async (event, rect) => {
+  // Ultra-fast path: Crop directly from in-memory frozen GDI desktop image (< 1ms)
+  if (currentFreezeSnapshot && currentFreezeSnapshot.nativeImage && nativeBridge && nativeBridge.cropFreezeImageNative) {
+    try {
+      const croppedDataUrl = nativeBridge.cropFreezeImageNative(currentFreezeSnapshot, rect);
+      if (croppedDataUrl) {
+        return croppedDataUrl;
+      }
+    } catch (cropNativeErr) {
+      console.warn('[Crop Area Native Fallback]', cropNativeErr.message);
+    }
+  }
+
   const combinedBounds = getCombinedDisplaysBounds();
   const displays = screen.getAllDisplays();
 

@@ -503,8 +503,8 @@ function populateModelDropdowns() {
 }
 
 function setupElectronListeners() {
-  window.electronAPI.onStartSnipping(() => {
-    startSnippingUI();
+  window.electronAPI.onStartSnipping((frames) => {
+    startSnippingUI(frames);
   });
 
   if (window.electronAPI.onFreezeScreenSnapshot) {
@@ -564,7 +564,7 @@ function setupElectronListeners() {
 }
 
 // --- SNIPPING UI CONTROLLER ---
-function startSnippingUI() {
+function startSnippingUI(initialFrames) {
   document.body.classList.add('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
@@ -597,15 +597,18 @@ function startSnippingUI() {
   if (percentBadge) percentBadge.style.display = 'none';
 
   freezeFrames = [];
+  if (initialFrames && Array.isArray(initialFrames) && initialFrames.length > 0) {
+    handleFreezeScreenSnapshot(initialFrames);
+  } else if (window.electronAPI && window.electronAPI.getFreezeScreenFrames) {
+    window.electronAPI.getFreezeScreenFrames().then(frames => {
+      if (isSnippingActive && frames && frames.length > 0 && freezeFrames.length === 0) {
+        handleFreezeScreenSnapshot(frames);
+      }
+    }).catch(() => {});
+  }
+
   if (window.electronAPI) {
     window.electronAPI.setIgnoreMouseEvents(false);
-    if (window.electronAPI.getFreezeScreenFrames) {
-      window.electronAPI.getFreezeScreenFrames().then(frames => {
-        if (isSnippingActive && frames && frames.length > 0 && freezeFrames.length === 0) {
-          handleFreezeScreenSnapshot(frames);
-        }
-      }).catch(() => {});
-    }
   }
   resizeCanvasToVirtualScreen();
 }
@@ -615,6 +618,9 @@ function cancelSnippingUI(fromMain = false) {
   stopLaserScan();
   stopSpeechSynthesis();
   freezeFrames = [];
+  if (canvas) {
+    canvas.style.backgroundImage = 'none';
+  }
 
   if (!isSnippingActive && !isLaserScanning) {
     canvas.style.display = 'none';
@@ -648,7 +654,7 @@ function cancelSnippingUI(fromMain = false) {
   }
 }
 
-const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21' viewBox='0 0 21 21'%3E%3Cline x1='10.5' y1='1' x2='10.5' y2='20' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3Cline x1='1' y1='10.5' x2='20' y2='10.5' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3C/svg%3E\") 10 10, crosshair";
+const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Cline x1='16.5' y1='1' x2='16.5' y2='32' stroke='%23000000' stroke-opacity='0.75' stroke-width='3.2' stroke-linecap='square'/%3E%3Cline x1='1' y1='16.5' x2='32' y2='16.5' stroke='%23000000' stroke-opacity='0.75' stroke-width='3.2' stroke-linecap='square'/%3E%3Cline x1='16.5' y1='2' x2='16.5' y2='31' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='square'/%3E%3Cline x1='2' y1='16.5' x2='31' y2='16.5' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='square'/%3E%3C/svg%3E\") 16 16, crosshair";
 
 let freezeFrames = [];
 
@@ -657,6 +663,15 @@ function handleFreezeScreenSnapshot(frames) {
   freezeFrames = [];
   frames.forEach(f => {
     if (!f.dataUrl) return;
+
+    // Set immediate CSS background for instant 0ms visual rendering while Image element decodes
+    if (canvas && f.dataUrl) {
+      canvas.style.backgroundImage = `url("${f.dataUrl}")`;
+      canvas.style.backgroundSize = '100% 100%';
+      canvas.style.backgroundRepeat = 'no-repeat';
+      canvas.style.backgroundPosition = '0 0';
+    }
+
     const img = new Image();
     const frameObj = {
       img,
@@ -668,6 +683,9 @@ function handleFreezeScreenSnapshot(frames) {
     img.onload = () => {
       requestDrawScene();
     };
+    if (typeof img.decode === 'function') {
+      img.decode().then(() => requestDrawScene()).catch(() => {});
+    }
     img.src = f.dataUrl;
     freezeFrames.push(frameObj);
   });
@@ -879,16 +897,18 @@ function drawScene() {
 
   if (isSnippingActive || isLaserScanning || box.w > 0) {
     // 1. Draw freeze frame background overlay if captured
+    let hasDrawnImage = false;
     if (freezeFrames && freezeFrames.length > 0) {
       freezeFrames.forEach(f => {
         if (f.img && f.img.complete && f.img.naturalWidth > 0) {
           ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
+          hasDrawnImage = true;
         }
       });
     }
 
-    // 2. Dark tint overlay across canvas
-    ctx.fillStyle = "rgba(15, 23, 42, 0.32)";
+    // 2. Dark tint overlay across canvas (sleek soft dark minimalist tone)
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 3. Highlighted frozen screen inside crop box
@@ -902,34 +922,54 @@ function drawScene() {
         freezeFrames.forEach(f => {
           if (f.img && f.img.complete && f.img.naturalWidth > 0) {
             ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
+          } else {
+            ctx.clearRect(box.x, box.y, box.w, box.h);
           }
         });
       } else {
         ctx.clearRect(box.x, box.y, box.w, box.h);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-        ctx.fillRect(box.x, box.y, box.w, box.h);
       }
       ctx.restore();
 
-      // 4. Clean border
-      ctx.strokeStyle = "#0284c7";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      // 4. Clean dark minimalist selection border (crisp white line with soft black outer frame)
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 1;
 
-      // 5. Dimension badge
+      // Outer soft black border
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.95)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w + 1, box.h + 1);
+
+      // Inner crisp clean monochrome border
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(box.x, box.y, box.w, box.h);
+      ctx.restore();
+
+      // 5. Dimension badge (sleek soft dark badge)
       const sizeText = `${Math.round(box.w)} × ${Math.round(box.h)}`;
-      ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
-      const badgeW = ctx.measureText(sizeText).width + 14;
-      const badgeH = 20;
+      ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+      const badgeW = ctx.measureText(sizeText).width + 16;
+      const badgeH = 22;
       const badgeX = Math.max(4, Math.min(box.x, canvas.width - badgeW - 4));
-      const badgeY = (box.y + box.h + 26 < canvas.height) ? (box.y + box.h + 6) : Math.max(4, box.y - 24);
+      const badgeY = (box.y + box.h + 28 < canvas.height) ? (box.y + box.h + 6) : Math.max(4, box.y - 26);
       
-      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.save();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
       ctx.beginPath();
-      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
       ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(sizeText, badgeX + 7, badgeY + 14);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillText(sizeText, badgeX + 8, badgeY + 15);
+      ctx.restore();
 
       // 6. Interactive handles (all 4 corners)
       if (!isDrawing) {
@@ -942,13 +982,17 @@ function drawScene() {
 function drawInteractiveHandles(x, y, w, h) {
   const corners = [{ x: x, y: y }, { x: x + w, y: y }, { x: x, y: y + h }, { x: x + w, y: y + h }];
   corners.forEach(c => {
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+    ctx.shadowBlur = 3;
     ctx.beginPath();
-    ctx.arc(c.x, c.y, 4.5, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
-    ctx.strokeStyle = "#0284c7";
-    ctx.lineWidth = 2;
     ctx.fill();
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.restore();
   });
 }
 
@@ -1302,6 +1346,7 @@ async function processScreenCapture(cropBox) {
     stopLaserScan();
     if (percentBadge) percentBadge.style.display = 'none';
     canvas.style.display = 'none';
+    canvas.style.backgroundImage = 'none';
     if (topHint) topHint.style.display = 'none';
 
     const streamStartTime = performance.now();
