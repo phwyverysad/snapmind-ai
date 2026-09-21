@@ -507,6 +507,12 @@ function setupElectronListeners() {
     startSnippingUI();
   });
 
+  if (window.electronAPI.onFreezeScreenSnapshot) {
+    window.electronAPI.onFreezeScreenSnapshot((frames) => {
+      handleFreezeScreenSnapshot(frames);
+    });
+  }
+
   window.electronAPI.onCancelSnipping(() => {
     cancelSnippingUI(true);
   });
@@ -590,8 +596,16 @@ function startSnippingUI() {
   if (topHint) topHint.style.display = 'none';
   if (percentBadge) percentBadge.style.display = 'none';
 
+  freezeFrames = [];
   if (window.electronAPI) {
     window.electronAPI.setIgnoreMouseEvents(false);
+    if (window.electronAPI.getFreezeScreenFrames) {
+      window.electronAPI.getFreezeScreenFrames().then(frames => {
+        if (isSnippingActive && frames && frames.length > 0 && freezeFrames.length === 0) {
+          handleFreezeScreenSnapshot(frames);
+        }
+      }).catch(() => {});
+    }
   }
   resizeCanvasToVirtualScreen();
 }
@@ -600,6 +614,7 @@ function cancelSnippingUI(fromMain = false) {
   document.body.classList.remove('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
+  freezeFrames = [];
 
   if (!isSnippingActive && !isLaserScanning) {
     canvas.style.display = 'none';
@@ -633,10 +648,34 @@ function cancelSnippingUI(fromMain = false) {
   }
 }
 
-const SNIP_RETICLE_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23000000' stroke-width='3' opacity='0.7'/%3E%3Cline x1='16' y1='2' x2='16' y2='9' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='16' y1='23' x2='16' y2='30' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='2' y1='16' x2='9' y2='16' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Cline x1='23' y1='16' x2='30' y2='16' stroke='%23000000' stroke-width='3' stroke-linecap='round' opacity='0.7'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230284c7' stroke-width='1.8'/%3E%3Cline x1='16' y1='2' x2='16' y2='9' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='16' y1='23' x2='16' y2='30' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='2' y1='16' x2='9' y2='16' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Cline x1='23' y1='16' x2='30' y2='16' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.2' fill='%23000000' opacity='0.7'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%2338bdf8'/%3E%3C/svg%3E\") 16 16, crosshair";
+const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21' viewBox='0 0 21 21'%3E%3Cline x1='10.5' y1='1' x2='10.5' y2='20' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3Cline x1='1' y1='10.5' x2='20' y2='10.5' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3C/svg%3E\") 10 10, crosshair";
+
+let freezeFrames = [];
+
+function handleFreezeScreenSnapshot(frames) {
+  if (!frames || !Array.isArray(frames) || frames.length === 0) return;
+  freezeFrames = [];
+  frames.forEach(f => {
+    if (!f.dataUrl) return;
+    const img = new Image();
+    const frameObj = {
+      img,
+      x: typeof f.x === 'number' ? f.x : 0,
+      y: typeof f.y === 'number' ? f.y : 0,
+      width: typeof f.width === 'number' ? f.width : window.innerWidth,
+      height: typeof f.height === 'number' ? f.height : window.innerHeight
+    };
+    img.onload = () => {
+      requestDrawScene();
+    };
+    img.src = f.dataUrl;
+    freezeFrames.push(frameObj);
+  });
+  requestDrawScene();
+}
 
 function setCanvasCursor(newCursor) {
-  const targetCursor = (newCursor === 'crosshair') ? SNIP_RETICLE_CURSOR : newCursor;
+  const targetCursor = (newCursor === 'crosshair') ? SNIP_CLEAN_CROSSHAIR_CURSOR : newCursor;
   if (canvas && canvas.style.cursor !== targetCursor) {
     canvas.style.cursor = targetCursor;
   }
@@ -652,6 +691,17 @@ window.addEventListener('keydown', (e) => {
       const historyModal = document.getElementById('historyModal');
       if (settingsModal && settingsModal.style.display === 'flex') closeSettingsModal();
       else if (historyModal && historyModal.style.display === 'flex') closeHistoryModal();
+    }
+    return;
+  }
+
+  // Ctrl+C / Cmd+C text copy shortcut
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    const sel = (window.getSelection && window.getSelection().toString()) ? window.getSelection().toString() : '';
+    if (sel && sel.length > 0) {
+      if (window.electronAPI && window.electronAPI.writeClipboardText) {
+        window.electronAPI.writeClipboardText(sel);
+      }
     }
   }
 });
@@ -735,15 +785,29 @@ canvas.addEventListener('mousemove', (e) => {
 
   if (isResizing) {
     if (activeHandle === 'tl') {
-      let newW = box.x + box.w - mx;
-      let newH = box.y + box.h - my;
-      if (newW > 15) { box.w = newW; box.x = mx; }
-      if (newH > 15) { box.h = newH; box.y = my; }
+      const curX = Math.min(box.x + box.w - 8, Math.max(0, mx));
+      const curY = Math.min(box.y + box.h - 8, Math.max(0, my));
+      box.w += box.x - curX;
+      box.h += box.y - curY;
+      box.x = curX;
+      box.y = curY;
+    } else if (activeHandle === 'tr') {
+      const curX = Math.max(box.x + 8, Math.min(canvas.width, mx));
+      const curY = Math.min(box.y + box.h - 8, Math.max(0, my));
+      box.w = curX - box.x;
+      box.h += box.y - curY;
+      box.y = curY;
+    } else if (activeHandle === 'bl') {
+      const curX = Math.min(box.x + box.w - 8, Math.max(0, mx));
+      const curY = Math.max(box.y + 8, Math.min(canvas.height, my));
+      box.w += box.x - curX;
+      box.x = curX;
+      box.h = curY - box.y;
     } else if (activeHandle === 'br') {
-      let newW = mx - box.x;
-      let newH = my - box.y;
-      if (newW > 15) box.w = newW;
-      if (newH > 15) box.h = newH;
+      const curX = Math.max(box.x + 8, Math.min(canvas.width, mx));
+      const curY = Math.max(box.y + 8, Math.min(canvas.height, my));
+      box.w = curX - box.x;
+      box.h = curY - box.y;
     }
     requestDrawScene();
     return;
@@ -757,10 +821,12 @@ canvas.addEventListener('mousemove', (e) => {
   }
 
   if (isDrawing) {
-    box.x = Math.min(startMouseX, mx);
-    box.y = Math.min(startMouseY, my);
-    box.w = Math.abs(mx - startMouseX);
-    box.h = Math.abs(my - startMouseY);
+    const curX = Math.max(0, Math.min(canvas.width, mx));
+    const curY = Math.max(0, Math.min(canvas.height, my));
+    box.x = Math.min(startMouseX, curX);
+    box.y = Math.min(startMouseY, curY);
+    box.w = Math.abs(curX - startMouseX);
+    box.h = Math.abs(curY - startMouseY);
     requestDrawScene();
   }
 });
@@ -777,7 +843,7 @@ window.addEventListener('mouseup', async (e) => {
     isResizing = false;
     activeHandle = null;
 
-    if (box.w > 20 && box.h > 20) {
+    if (box.w >= 8 && box.h >= 8) {
       isSnippingActive = false;
       topHint.style.display = 'none';
       stopLaserScan();
@@ -791,9 +857,11 @@ window.addEventListener('mouseup', async (e) => {
 });
 
 function getHandleAt(mx, my) {
-  const radius = 8;
+  const radius = 9;
   const corners = {
     tl: { x: box.x, y: box.y },
+    tr: { x: box.x + box.w, y: box.y },
+    bl: { x: box.x, y: box.y + box.h },
     br: { x: box.x + box.w, y: box.y + box.h }
   };
   for (let key in corners) {
@@ -810,19 +878,45 @@ function drawScene() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (isSnippingActive || isLaserScanning || box.w > 0) {
-    ctx.fillStyle = "rgba(15, 23, 42, 0.28)";
+    // 1. Draw freeze frame background overlay if captured
+    if (freezeFrames && freezeFrames.length > 0) {
+      freezeFrames.forEach(f => {
+        if (f.img && f.img.complete && f.img.naturalWidth > 0) {
+          ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
+        }
+      });
+    }
+
+    // 2. Dark tint overlay across canvas
+    ctx.fillStyle = "rgba(15, 23, 42, 0.32)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // 3. Highlighted frozen screen inside crop box
     if (box.w > 0 && box.h > 0) {
-      ctx.clearRect(box.x, box.y, box.w, box.h);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
-      ctx.fillRect(box.x, box.y, box.w, box.h);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(box.x, box.y, box.w, box.h);
+      ctx.clip();
 
+      if (freezeFrames && freezeFrames.length > 0) {
+        freezeFrames.forEach(f => {
+          if (f.img && f.img.complete && f.img.naturalWidth > 0) {
+            ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
+          }
+        });
+      } else {
+        ctx.clearRect(box.x, box.y, box.w, box.h);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+      }
+      ctx.restore();
+
+      // 4. Clean border
       ctx.strokeStyle = "#0284c7";
       ctx.lineWidth = 1.5;
       ctx.strokeRect(box.x, box.y, box.w, box.h);
 
-      // Clear dimension badge during selection
+      // 5. Dimension badge
       const sizeText = `${Math.round(box.w)} × ${Math.round(box.h)}`;
       ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
       const badgeW = ctx.measureText(sizeText).width + 14;
@@ -837,6 +931,7 @@ function drawScene() {
       ctx.fillStyle = "#ffffff";
       ctx.fillText(sizeText, badgeX + 7, badgeY + 14);
 
+      // 6. Interactive handles (all 4 corners)
       if (!isDrawing) {
         drawInteractiveHandles(box.x, box.y, box.w, box.h);
       }
@@ -1872,23 +1967,36 @@ function appendUserBubble(text, shouldScroll = true) {
 
 // --- COPY & EXPORT ---
 function copySingleBubble(elementId, btnEl) {
-  const text = document.getElementById(elementId)?.innerText || '';
-  navigator.clipboard.writeText(text).then(() => {
-    const orig = btnEl.innerHTML;
-    btnEl.innerHTML = `
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>คัดลอกแล้ว!</span>
-    `;
-    setTimeout(() => { btnEl.innerHTML = orig; }, 1600);
-  });
+  const selection = (window.getSelection && window.getSelection().toString()) ? window.getSelection().toString().trim() : '';
+  const el = document.getElementById(elementId);
+  const text = selection || (el ? (el.innerText || '') : '');
+  if (!text) return;
+
+  const onCopied = () => {
+    if (btnEl) {
+      const orig = btnEl.innerHTML;
+      btnEl.innerHTML = `
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>คัดลอกแล้ว!</span>
+      `;
+      setTimeout(() => { btnEl.innerHTML = orig; }, 1600);
+    }
+  };
+
+  if (window.electronAPI && window.electronAPI.writeClipboardText) {
+    window.electronAPI.writeClipboardText(text);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(onCopied);
+  } else {
+    onCopied();
+  }
 }
 
 function copyAllChat() {
   const bubbles = chatThread.querySelectorAll('.chat-bubble');
   if (!bubbles || bubbles.length === 0) {
-    navigator.clipboard.writeText('').then(() => {
-      alert("ไม่มีข้อความการสนทนาให้คัดลอก");
-    });
+    alert("ไม่มีข้อความการสนทนาให้คัดลอก");
     return;
   }
 
@@ -1900,16 +2008,25 @@ function copyAllChat() {
     } else if (bubble.classList.contains('ai')) {
       const tagEl = bubble.querySelector('.ai-badge-tag span');
       const title = tagEl ? tagEl.innerText.trim() : 'Gemini AI';
-      const contentEl = bubble.querySelector('div[id^="bubble_"]');
+      const contentEl = bubble.querySelector('div[id^="bubble_"]') || bubble.querySelector('.markdown-body');
       const contentText = contentEl ? contentEl.innerText.trim() : '';
       if (contentText) formatted.push(`${title}:\n${contentText}`);
     }
   });
 
   const finalCopyText = formatted.join('\n\n---\n\n');
-  navigator.clipboard.writeText(finalCopyText).then(() => {
+  if (window.electronAPI && window.electronAPI.writeClipboardText) {
+    window.electronAPI.writeClipboardText(finalCopyText);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(finalCopyText).then(() => {
+      alert("คัดลอกการสนทนาทั้งหมดเรียบร้อยแล้ว!");
+    }).catch(() => {
+      alert("คัดลอกการสนทนาทั้งหมดเรียบร้อยแล้ว!");
+    });
+  } else {
     alert("คัดลอกการสนทนาทั้งหมดเรียบร้อยแล้ว!");
-  });
+  }
 }
 
 async function exportResultFileDialog() {

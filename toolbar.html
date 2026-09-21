@@ -573,7 +573,26 @@
       box-sizing: border-box;
       user-select: text !important;
       -webkit-user-select: text !important;
+      cursor: text;
       word-break: break-word;
+    }
+
+    .quick-answer-body,
+    .quick-answer-body * {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+    }
+
+    .quick-answer-body p,
+    .quick-answer-body span,
+    .quick-answer-body li,
+    .quick-answer-body code,
+    .quick-answer-body pre,
+    .quick-answer-body h1,
+    .quick-answer-body h2,
+    .quick-answer-body h3,
+    .quick-answer-body h4 {
+      cursor: text;
     }
 
     .quick-answer-body h1 {

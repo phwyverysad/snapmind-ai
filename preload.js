@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Screen Snipping & Capture
   cropArea: (bounds) => ipcRenderer.invoke('crop-area', bounds),
   getDisplayBounds: () => ipcRenderer.invoke('get-display-bounds'),
+  getFreezeScreenFrames: () => ipcRenderer.invoke('get-freeze-screen-frames'),
+  onFreezeScreenSnapshot: (callback) => {
+    ipcRenderer.removeAllListeners('freeze-screen-snapshot');
+    ipcRenderer.on('freeze-screen-snapshot', (event, frames) => callback(frames));
+  },
 
   // Gemini AI Processing (Secure Main Process IPC)
   analyzeScreen: (base64Image, modelId) => ipcRenderer.invoke('gemini-analyze-screen', { base64Image, modelId }),
@@ -98,6 +103,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeToolbarWindow: (bounds) => ipcRenderer.send('resize-toolbar-window', bounds),
   moveToolbarBy: (delta) => ipcRenderer.send('move-toolbar-by', delta),
   getClipboardText: () => ipcRenderer.invoke('get-clipboard-text'),
+  writeClipboardText: (text) => ipcRenderer.invoke('write-clipboard-text', text),
   copyAndGetSelectedText: () => ipcRenderer.invoke('trigger-copy-and-get-text'),
   onQuickDigitPressed: (callback) => {
     ipcRenderer.removeAllListeners('quick-text-number-pressed');

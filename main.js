@@ -1269,6 +1269,54 @@ let lastSnippingTriggerTime = 0;
 let cachedDesktopCapturePromise = null;
 let cachedCaptureTimestamp = 0;
 
+async function captureScreenFreezeFrames() {
+  try {
+    const displays = screen.getAllDisplays();
+    if (!displays || displays.length === 0) return [];
+    const combinedBounds = getCombinedDisplaysBounds();
+
+    const maxDisplayWidth = Math.max(...displays.map(d => Math.round(d.bounds.width * (d.scaleFactor || 1))));
+    const maxDisplayHeight = Math.max(...displays.map(d => Math.round(d.bounds.height * (d.scaleFactor || 1))));
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.min(Math.max(maxDisplayWidth, 1920), 4096),
+        height: Math.min(Math.max(maxDisplayHeight, 1080), 4096)
+      }
+    });
+
+    if (!sources || sources.length === 0) return [];
+
+    cachedCaptureTimestamp = Date.now();
+    cachedDesktopCapturePromise = Promise.resolve(sources);
+
+    const frames = displays.map(d => {
+      let targetSource = sources.find(s => s.display_id === d.id.toString() || s.id.includes(d.id.toString()));
+      if (!targetSource) targetSource = sources[0];
+
+      let dataUrl = null;
+      if (targetSource && targetSource.thumbnail) {
+        dataUrl = 'data:image/jpeg;base64,' + targetSource.thumbnail.toJPEG(82).toString('base64');
+      }
+
+      return {
+        displayId: d.id,
+        x: d.bounds.x - combinedBounds.x,
+        y: d.bounds.y - combinedBounds.y,
+        width: d.bounds.width,
+        height: d.bounds.height,
+        dataUrl
+      };
+    }).filter(f => Boolean(f.dataUrl));
+
+    return frames;
+  } catch (e) {
+    console.warn('[Freeze Screen Capture Warning]', e.message);
+    return [];
+  }
+}
+
 function preCaptureDesktopSources() {
   try {
     const displays = screen.getAllDisplays();
@@ -1300,10 +1348,15 @@ function startSnippingMode() {
   }
   lastSnippingTriggerTime = now;
 
-  // Ultra-speed optimization: Pre-capture desktop asynchronously and prewarm TLS connection
+  // Ultra-speed optimization: Pre-capture desktop asynchronously, capture freeze frames, and prewarm TLS connection
   setImmediate(() => {
     preCaptureDesktopSources();
     prewarmGeminiConnection();
+    captureScreenFreezeFrames().then(frames => {
+      if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive && frames && frames.length > 0) {
+        mainWindow.webContents.send('freeze-screen-snapshot', frames);
+      }
+    }).catch(() => {});
   });
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1760,6 +1813,25 @@ ipcMain.handle('gemini-file-search-delete-store', async (event, { storeName, for
 
 ipcMain.handle('gemini-tools-execute-function', async (event, { name, args }) => {
   return await geminiTools.executeToolFunction(name, args);
+});
+
+// Snapshot & Freeze Frame IPC Handlers
+ipcMain.handle('get-freeze-screen-frames', async () => {
+  return await captureScreenFreezeFrames();
+});
+
+// Native Clipboard Copy IPC Handler
+ipcMain.handle('write-clipboard-text', (event, text) => {
+  try {
+    const { clipboard } = require('electron');
+    if (clipboard && typeof clipboard.writeText === 'function') {
+      clipboard.writeText(String(text || ''));
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
 });
 
 // Multi-Monitor Aware Screen Cropping & Image Optimization
@@ -2612,33 +2684,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
   const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
 
-  // In-Memory LRU Cache check (Instant 0ms repeated query response)
-  const cached = quickResponseCache.get(selectedModel, resolvedCategory, optimizedPrompt);
-  if (cached) {
-    if (event.sender && !event.sender.isDestroyed()) {
-      event.sender.send('quick-answer-chunk', {
-        chunk: cached.fullText,
-        endpointUsed: cached.endpointUsed + ' (cached)'
-      });
-      event.sender.send('quick-answer-finish', {
-        fullText: cached.fullText,
-        durationSec: '0.00',
-        endpointUsed: cached.endpointUsed + ' (cached)',
-        cached: true
-      });
-    }
-
-    return {
-      success: true,
-      fullText: cached.fullText,
-      durationSec: '0.00',
-      endpointUsed: cached.endpointUsed + ' (cached)',
-      cached: true
-    };
-  }
-
-  // Fast-track thinking budget: flash-lite models do NOT support thinkingConfig at all,
-  // gemini-3.8-flash supports thinkingBudget: 0 for fastest TTFT, pro models use configured thinking
+  // Always perform fresh AI dispatch (no cached stale bypass)
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
   const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
   let thinkingConf = {};
@@ -2732,17 +2778,6 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
   const endpointsToTry = getCandidateEndpoints(selectedModel);
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
   const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
-
-  // Instant In-Memory Cache Check
-  const cached = quickResponseCache.get(selectedModel, resolvedCategory, optimizedPrompt);
-  if (cached) {
-    return {
-      cached: true,
-      fullText: cached.fullText,
-      durationSec: '0.00',
-      endpointUsed: cached.endpointUsed + ' (cached)'
-    };
-  }
 
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
   const isFlashLite = selectedModel && selectedModel.includes('flash-lite');

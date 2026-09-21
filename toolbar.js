@@ -123,8 +123,19 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Ctrl+C / Cmd+C copy text shortcut support
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+    const sel = (window.getSelection && window.getSelection().toString()) ? window.getSelection().toString() : '';
+    if (sel && sel.length > 0) {
+      if (window.electronAPI && window.electronAPI.writeClipboardText) {
+        window.electronAPI.writeClipboardText(sel);
+      }
+      return;
+    }
+  }
+
   const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-  if (tag !== 'input' && tag !== 'textarea') {
+  if (tag !== 'input' && tag !== 'textarea' && !isAnswerCardActive && !isCustomInputOpen) {
     if (e.key >= '1' && e.key <= '9') {
       e.preventDefault();
       const digitIndex = parseInt(e.key, 10) - 1;
@@ -277,14 +288,6 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName }) {
     try {
       const startTime = Date.now();
       const params = await window.electronAPI.getQuickStreamParams({ promptText, promptId, categoryName });
-
-      // In-Memory LRU Cache Hit (Instant 0ms response)
-      if (params && params.cached) {
-        renderAnswerContent(params.fullText, true);
-        const status = document.getElementById('quickAnswerStatus');
-        if (status) status.innerText = `ตอบเสร็จสิ้น (${params.durationSec || '0.00'}s)`;
-        return;
-      }
 
       const { apiKey, endpointsToTry, requestPayload, selectedModel, resolvedCategory, optimizedPrompt } = params;
 
@@ -509,8 +512,11 @@ function showQuickAnswerCard(badgeTitle) {
   const status = document.getElementById('quickAnswerStatus');
   const body = document.getElementById('quickAnswerBody');
 
-  // Reset high-performance stream rendering state
+  // Reset stream rendering state
   quickAnswerStreamText = '';
+  lastRenderedText = '';
+  lastRenderedHtml = '';
+  lastFullParseTime = 0;
   isRenderScheduled = false;
   hasInitialResized = false;
   lastMathRenderTime = 0;
@@ -532,6 +538,11 @@ function showQuickAnswerCard(badgeTitle) {
   // Inform main process that answer card is active (prevents outside clicks from dismissing answer window)
   if (window.electronAPI && window.electronAPI.setToolbarAnswerActive) {
     window.electronAPI.setToolbarAnswerActive(true);
+  }
+
+  // Enable window focus so user can click, highlight/select text, and copy (Ctrl+C)
+  if (window.electronAPI && window.electronAPI.setToolbarFocusable) {
+    window.electronAPI.setToolbarFocusable(true);
   }
 
   // Expand window height to accommodate answer card
@@ -673,17 +684,28 @@ function renderAnswerContent(text, isFinal = false) {
 }
 
 function copyQuickAnswer() {
+  const selection = (window.getSelection && window.getSelection().toString()) ? window.getSelection().toString().trim() : '';
   const body = document.getElementById('quickAnswerBody');
-  if (!body) return;
-  const text = body.innerText || '';
-  navigator.clipboard.writeText(text).then(() => {
+  const text = selection || (body ? (body.innerText || '') : '');
+  if (!text) return;
+
+  const onCopied = () => {
     const label = document.getElementById('quickCopyLabel');
     if (label) {
       const orig = label.innerText;
       label.innerText = 'คัดลอกแล้ว!';
       setTimeout(() => { label.innerText = orig; }, 1400);
     }
-  });
+  };
+
+  if (window.electronAPI && window.electronAPI.writeClipboardText) {
+    window.electronAPI.writeClipboardText(text);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(onCopied);
+  } else {
+    onCopied();
+  }
 }
 
 function toggleQuickCustomInput(forceState) {
