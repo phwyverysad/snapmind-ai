@@ -137,13 +137,24 @@ function copySelectedTextNative(targetHwnd = null) {
   return '';
 }
 
-function makeWindowTopmostNative(win) {
+function makeWindowTopmostNative(win, bounds = null) {
   if (!win || win.isDestroyed()) return;
-  if (!isLoaded && !initNativeBridge()) return;
   try {
     const hwndBuf = win.getNativeWindowHandle();
     if (hwndBuf && hwndBuf.length >= 4) {
-      fnMakeWindowTopmost(hwndBuf);
+      if (isLoaded || initNativeBridge()) {
+        if (fnMakeWindowTopmost) fnMakeWindowTopmost(hwndBuf);
+      }
+      if (initGdiCapture() && fnSetWindowPos) {
+        const hwnd = (hwndBuf.length >= 8) ? hwndBuf.readBigInt64LE(0) : hwndBuf.readInt32LE(0);
+        if (bounds) {
+          // HWND_TOPMOST = -1, SWP_SHOWWINDOW = 0x0040
+          fnSetWindowPos(hwnd, -1, Math.round(bounds.x), Math.round(bounds.y), Math.round(bounds.width), Math.round(bounds.height), 0x0040);
+        } else {
+          // HWND_TOPMOST = -1, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW = 0x0043
+          fnSetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0043);
+        }
+      }
     }
   } catch (e) {
     console.warn('[NativeBridge] Error enforcing topmost:', e);
@@ -304,6 +315,7 @@ let fnSelectObject = null;
 let fnBitBlt = null;
 let fnCreateCompatibleBitmap = null;
 let fnGetDIBits = null;
+let fnSetWindowPos = null;
 let BITMAPINFOHEADER = null;
 let electronNativeImage = null;
 
@@ -323,6 +335,7 @@ function initGdiCapture() {
     if (!fnGetDC) fnGetDC = user32Lib.func('intptr_t __stdcall GetDC(intptr_t hWnd)');
     if (!fnReleaseDC) fnReleaseDC = user32Lib.func('int __stdcall ReleaseDC(intptr_t hWnd, intptr_t hDC)');
     if (!fnGetSystemMetrics) fnGetSystemMetrics = user32Lib.func('int __stdcall GetSystemMetrics(int nIndex)');
+    if (!fnSetWindowPos) fnSetWindowPos = user32Lib.func('int __stdcall SetWindowPos(intptr_t hWnd, intptr_t hWndInsertAfter, int X, int Y, int cx, int cy, uint32_t uFlags)');
 
     if (!fnCreateCompatibleDC) fnCreateCompatibleDC = gdi32Lib.func('intptr_t __stdcall CreateCompatibleDC(intptr_t hDC)');
     if (!fnDeleteDC) fnDeleteDC = gdi32Lib.func('int __stdcall DeleteDC(intptr_t hDC)');
@@ -455,9 +468,41 @@ function cropFreezeImageNative(freezeSnapshot, rect) {
     const w = Math.max(1, Math.min(size.width - x, Math.round(rect.w)));
     const h = Math.max(1, Math.min(size.height - y, Math.round(rect.h)));
     const cropped = img.crop({ x, y, width: w, height: h });
-    if (!cropped.isEmpty()) {
-      return 'data:image/jpeg;base64,' + cropped.toJPEG(90).toString('base64');
+    if (cropped.isEmpty()) return null;
+
+    // Adaptive Vision Downscaling for Ultra-Fast Gemini TTFT
+    let processedImg = cropped;
+    const croppedSize = cropped.getSize();
+    const pixelArea = croppedSize.width * croppedSize.height;
+
+    let maxDimension = 768;
+    let jpegQuality = 68;
+
+    if (pixelArea <= 250000) {
+      maxDimension = 512;
+      jpegQuality = 65;
+    } else if (pixelArea <= 750000) {
+      maxDimension = 768;
+      jpegQuality = 68;
+    } else {
+      maxDimension = 768;
+      jpegQuality = 68;
     }
+
+    if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
+      let newW, newH;
+      if (croppedSize.width >= croppedSize.height) {
+        newW = maxDimension;
+        newH = Math.max(1, Math.round((croppedSize.height / croppedSize.width) * maxDimension));
+      } else {
+        newH = maxDimension;
+        newW = Math.max(1, Math.round((croppedSize.width / croppedSize.height) * maxDimension));
+      }
+      processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
+    }
+
+    const jpegBuf = processedImg.toJPEG(jpegQuality);
+    return 'data:image/jpeg;base64,' + jpegBuf.toString('base64');
   } catch (e) {
     console.warn('[NativeBridge] cropFreezeImageNative error:', e.message);
   }

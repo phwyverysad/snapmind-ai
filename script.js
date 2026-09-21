@@ -379,7 +379,7 @@ async function reanalyzeWithNewModel() {
     }
     hasAnswerCompleted = true;
 
-    if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length || currentAnalysisResult.ocr === '\uD83D\uDD17')) {
+    if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length)) {
       currentAnalysisResult.ocr = data.ocrText;
     }
     currentDisplayModelName = selectedModelNameText();
@@ -907,8 +907,8 @@ function drawScene() {
       });
     }
 
-    // 2. Dark tint overlay across canvas (sleek soft dark minimalist tone)
-    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    // 2. Dark tint overlay across canvas (sleek soft dark minimalist tone, slightly brighter)
+    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 3. Highlighted frozen screen inside crop box
@@ -931,69 +931,23 @@ function drawScene() {
       }
       ctx.restore();
 
-      // 4. Clean dark minimalist selection border (crisp white line with soft black outer frame)
+      // 4. Image 3 Clean dashed border (crisp white dashed line with soft shadow)
       ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-      ctx.shadowBlur = 4;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+      ctx.shadowBlur = 2;
       ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 1;
-
-      // Outer soft black border
-      ctx.strokeStyle = "rgba(15, 23, 42, 0.95)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(box.x - 0.5, box.y - 0.5, box.w + 1, box.h + 1);
-
-      // Inner crisp clean monochrome border
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.lineWidth = 1;
+      ctx.shadowOffsetY = 0;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
       ctx.strokeRect(box.x, box.y, box.w, box.h);
       ctx.restore();
-
-      // 5. Dimension badge (sleek soft dark badge)
-      const sizeText = `${Math.round(box.w)} × ${Math.round(box.h)}`;
-      ctx.font = "600 11px system-ui, -apple-system, sans-serif";
-      const badgeW = ctx.measureText(sizeText).width + 16;
-      const badgeH = 22;
-      const badgeX = Math.max(4, Math.min(box.x, canvas.width - badgeW - 4));
-      const badgeY = (box.y + box.h + 28 < canvas.height) ? (box.y + box.h + 6) : Math.max(4, box.y - 26);
-      
-      ctx.save();
-      ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
-      ctx.beginPath();
-      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
-      ctx.fill();
-
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.fillText(sizeText, badgeX + 8, badgeY + 15);
-      ctx.restore();
-
-      // 6. Interactive handles (all 4 corners)
-      if (!isDrawing) {
-        drawInteractiveHandles(box.x, box.y, box.w, box.h);
-      }
     }
   }
 }
 
 function drawInteractiveHandles(x, y, w, h) {
-  const corners = [{ x: x, y: y }, { x: x + w, y: y }, { x: x, y: y + h }, { x: x + w, y: y + h }];
-  corners.forEach(c => {
-    ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
-    ctx.shadowBlur = 3;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-  });
+  // Handles removed to match clean dashed border design
 }
 
 function drawGradientLaser() {
@@ -1272,8 +1226,14 @@ function renderStreamingContent() {
 async function processScreenCapture(cropBox) {
   try {
     lastCroppedBox = cropBox;
-    const croppedDataUrl = await window.electronAPI.cropArea(cropBox);
-    currentCroppedBase64 = croppedDataUrl;
+
+    // 1. Instant 0ms transition: hide snipping canvas, reveal AI window with skeleton
+    document.body.classList.remove('snipping-active');
+    stopLaserScan();
+    if (percentBadge) percentBadge.style.display = 'none';
+    canvas.style.display = 'none';
+    canvas.style.backgroundImage = 'none';
+    if (topHint) topHint.style.display = 'none';
 
     // Ensure all modals (Settings & History) are strictly closed and hidden
     const settingsModal = document.getElementById('settingsModal');
@@ -1289,7 +1249,7 @@ async function processScreenCapture(cropBox) {
       historyModal.style.opacity = '0';
     }
 
-    // 1. Default to Answer tab and reset thinking state
+    // Default to Answer tab and reset thinking state
     activeCategory = 'answer';
     const firstTab = document.querySelector('.tab-btn');
     const buttons = document.querySelectorAll('.tab-btn');
@@ -1338,16 +1298,8 @@ async function processScreenCapture(cropBox) {
       </div>
     `;
 
-    // 3. Reveal window with clean skeleton already loaded
-    document.body.classList.remove('snipping-active');
+    // 3. Reveal AI window with clean skeleton already loaded in 0ms
     showAiWindowPosition(cropBox);
-
-    // Cleanly stop laser scan and hide canvas simultaneously with zero transparent frame gap
-    stopLaserScan();
-    if (percentBadge) percentBadge.style.display = 'none';
-    canvas.style.display = 'none';
-    canvas.style.backgroundImage = 'none';
-    if (topHint) topHint.style.display = 'none';
 
     const streamStartTime = performance.now();
     let hasAnswerCompleted = false;
@@ -1355,7 +1307,10 @@ async function processScreenCapture(cropBox) {
     metricsBanner.classList.add('thinking');
     if (latencyText) latencyText.innerText = "กำลังวิเคราะห์...";
 
-    // 3. Connect real-time streaming listeners
+    // 4. Pre-attach real-time streaming listeners before trigger
+    if (window.electronAPI && window.electronAPI.removeStreamListeners) {
+      window.electronAPI.removeStreamListeners();
+    }
     window.electronAPI.onStreamChunk((data) => {
       if (data.type === 'ocr') {
         currentAnalysisResult.ocr = (currentAnalysisResult.ocr || '') + data.chunk;
@@ -1412,7 +1367,7 @@ async function processScreenCapture(cropBox) {
       }
       hasAnswerCompleted = true;
 
-      if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length || currentAnalysisResult.ocr === '\uD83D\uDD17')) {
+      if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length)) {
         currentAnalysisResult.ocr = data.ocrText;
       }
       // Ensure all 5 categories have robust content simultaneously!
@@ -1438,7 +1393,7 @@ async function processScreenCapture(cropBox) {
         id: Date.now(),
         model: currentDisplayModelName || selectedModelNameText(),
         timestamp: new Date().toLocaleString('th-TH'),
-        thumbnail: croppedDataUrl,
+        thumbnail: currentCroppedBase64,
         result: currentAnalysisResult,
         latency: `${data.durationSec}s`
       });
@@ -1457,7 +1412,14 @@ async function processScreenCapture(cropBox) {
       window.electronAPI.removeStreamListeners();
     });
 
-    // 4. Trigger streaming API in main process
+    // 5. Concurrently crop and trigger streaming API in main process without blocking UI
+    const croppedDataUrl = await window.electronAPI.cropArea(cropBox);
+    currentCroppedBase64 = croppedDataUrl;
+
+    if (!croppedDataUrl) {
+      throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
+    }
+
     const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
     await window.electronAPI.analyzeScreenStream(croppedDataUrl, selectedModel);
 

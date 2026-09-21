@@ -1244,6 +1244,7 @@ function createWindow() {
     skipTaskbar: true,
     resizable: true,
     hasShadow: false,
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1403,21 +1404,28 @@ function startSnippingMode() {
   unregisterToolbarShortcuts();
 
   const bounds = getCombinedDisplaysBounds();
-  const curBounds = mainWindow.getBounds();
-  if (curBounds.x !== bounds.x || curBounds.y !== bounds.y ||
-      curBounds.width !== bounds.width || curBounds.height !== bounds.height) {
-    mainWindow.setBounds(bounds);
-  }
-  mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.setSkipTaskbar(true);
 
   // Instant 0ms presentation without latency while keeping frame synchronization
   mainWindow.show();
   mainWindow.focus();
+  mainWindow.setBounds(bounds);
   if (nativeBridge && nativeBridge.makeWindowTopmostNative) {
-    nativeBridge.makeWindowTopmostNative(mainWindow);
+    nativeBridge.makeWindowTopmostNative(mainWindow, bounds);
   }
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive) {
+      const cur = mainWindow.getBounds();
+      if (cur.height !== bounds.height || cur.width !== bounds.width || cur.y !== bounds.y || cur.x !== bounds.x) {
+        mainWindow.setBounds(bounds);
+        if (nativeBridge && nativeBridge.makeWindowTopmostNative) {
+          nativeBridge.makeWindowTopmostNative(mainWindow, bounds);
+        }
+      }
+    }
+  }, 25);
 
   // Pre-cleanup DOM via executeJavaScript before showing window to eliminate any GPU buffer flash of AI window or Settings/History modals
   try {
