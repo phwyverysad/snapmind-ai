@@ -63,11 +63,14 @@
     @keyframes geminiEntrance {
       0% {
         opacity: 0;
-        transform: translateY(2px);
+        transform: scale(0.88) translateY(4px);
+      }
+      70% {
+        transform: scale(1.01) translateY(-1px);
       }
       100% {
         opacity: 1;
-        transform: translateY(0);
+        transform: scale(1.0) translateY(0);
       }
     }
 
@@ -101,8 +104,8 @@
       background: rgba(255, 255, 255, 0.98);
       border: 1px solid #cbd5e1;
       box-shadow: none !important; /* เอาเงาออกตามคำขอ: box-shadow: 0 10px 25px -5px */
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
       display: flex;
       flex-direction: row;
       align-items: center;
@@ -113,12 +116,8 @@
       box-sizing: border-box;
       flex-shrink: 0;
       margin: 0 auto;
-      -webkit-app-region: drag; /* THE ENTIRE TOOLBAR IS DRAGGABLE */
-      cursor: grab;
-    }
-
-    .quick-text-toolbar:active {
-      cursor: grabbing;
+      -webkit-app-region: no-drag !important;
+      cursor: default;
     }
 
     /* All interactive buttons & inputs inside toolbar */
@@ -127,8 +126,19 @@
     .quick-custom-input,
     .quick-custom-send,
     .quick-card-btn,
-    .quick-answer-body {
+    .quick-answer-body,
+    .custom-model-trigger,
+    .custom-model-item {
       -webkit-app-region: no-drag !important;
+      touch-action: manipulation !important;
+      cursor: pointer;
+    }
+
+    .quick-action-btn *,
+    .quick-card-btn * {
+      pointer-events: none !important;
+      -webkit-app-region: no-drag !important;
+      cursor: pointer;
     }
 
     /* === PROMINENT EASY-GRIP DRAG HANDLE === */
@@ -205,6 +215,18 @@
       -webkit-app-region: no-drag;
       user-select: none;
       flex-shrink: 0;
+      animation: optionPopIn 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes optionPopIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.92) translateY(3px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1.0) translateY(0);
+      }
     }
 
     .quick-action-btn:hover {
@@ -240,7 +262,7 @@
       color: #64748b;
       font-family: 'Fira Code', monospace;
       line-height: 1;
-      pointer-events: none;
+      pointer-events: auto;
       transition: all 0.14s ease;
     }
 
@@ -254,7 +276,7 @@
       font-size: 12.8px;
       font-weight: 500;
       color: #334155;
-      pointer-events: none;
+      pointer-events: auto;
       white-space: nowrap;
       transition: color 0.14s ease;
     }
@@ -515,6 +537,144 @@
       align-items: center;
       gap: 6px;
       -webkit-app-region: no-drag; /* Action buttons clickable */
+    }
+
+    /* === CUSTOM MODERN AI MODEL DROPDOWN (RED BOX AREA) === */
+    .custom-model-dropdown {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      -webkit-app-region: no-drag !important;
+    }
+
+    .custom-model-trigger {
+      height: 28px;
+      padding: 0 10px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      -webkit-app-region: no-drag !important;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: all 0.14s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .custom-model-trigger:hover {
+      background: #f8fafc;
+      border-color: #0284c7;
+      color: #0284c7;
+      box-shadow: 0 2px 5px rgba(2, 132, 199, 0.12);
+    }
+
+    .custom-model-trigger:active {
+      transform: scale(0.97);
+    }
+
+    .custom-model-dropdown.open .custom-model-trigger {
+      border-color: #0284c7;
+      background: #f0f9ff;
+      color: #0284c7;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    }
+
+    .custom-model-arrow {
+      width: 9px;
+      height: 6px;
+      color: #64748b;
+      transition: transform 0.18s ease;
+      pointer-events: none;
+      flex-shrink: 0;
+    }
+
+    .custom-model-dropdown.open .custom-model-arrow {
+      transform: rotate(180deg);
+      color: #0284c7;
+    }
+
+    .custom-model-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      min-width: 130px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.15), 0 2px 8px -2px rgba(15, 23, 42, 0.06);
+      padding: 4px;
+      z-index: 99999;
+      -webkit-app-region: no-drag !important;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      animation: modelMenuPop 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes modelMenuPop {
+      0% {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .custom-model-item {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: #334155;
+      cursor: pointer;
+      -webkit-app-region: no-drag !important;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: all 0.12s ease;
+      white-space: nowrap;
+    }
+
+    .custom-model-item:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+      font-weight: 600;
+    }
+
+    .custom-model-item.active {
+      background: #e0f2fe;
+      color: #0284c7;
+      font-weight: 600;
+    }
+
+    .custom-model-item .model-item-check {
+      width: 13px;
+      height: 13px;
+      color: #0284c7;
+      display: none;
+      flex-shrink: 0;
+    }
+
+    .custom-model-item.active .model-item-check {
+      display: block;
+    }
+
+    .quick-model-select {
+      display: none !important;
     }
 
     .quick-card-btn {
@@ -847,6 +1007,40 @@
           <span class="quick-status-text" id="quickAnswerStatus">กำลังประมวลผล...</span>
         </div>
         <div class="quick-answer-actions">
+          <!-- Custom-Built Modern AI Model Dropdown (Red Box Area) -->
+          <div class="quick-model-selector-wrap custom-model-dropdown" id="customModelDropdown">
+            <button type="button" class="custom-model-trigger" id="customModelTrigger" onclick="toggleCustomModelMenu(event)" title="สลับโมเดล AI เพื่อตอบใหม่ทันที">
+              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3.8 Flash</span>
+              <svg class="custom-model-arrow" width="9" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 1l4 4 4-4"/>
+              </svg>
+            </button>
+            <div class="custom-model-menu" id="customModelMenu" style="display: none;">
+              <div class="custom-model-item active" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
+                <span class="model-item-name">Gemini 3.8 Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3.5-flash-lite" onclick="selectCustomModel('gemini-3.5-flash-lite', 'Gemini 3.5 Flash Lite')">
+                <span class="model-item-name">Gemini 3.5 Flash Lite</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3.1-pro-preview" onclick="selectCustomModel('gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview')">
+                <span class="model-item-name">Gemini 3.1 Pro Preview</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3-flash-preview" onclick="selectCustomModel('gemini-3-flash-preview', 'Gemini 3 Flash')">
+                <span class="model-item-name">Gemini 3 Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <!-- Hidden native select element for backward-compat and test parity -->
+            <select class="quick-model-select" id="quickModelSelect" style="display: none;" onchange="handleQuickModelChange(this.value)">
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+            </select>
+          </div>
           <button class="quick-card-btn" id="quickSpeakBtn" title="อ่านออกเสียง" onclick="toggleQuickSpeak()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -865,6 +1059,9 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
+      </div>
+      <div class="source-snippet-banner" id="sourceSnippetBanner" style="display: none; font-size: 11px; color: #64748b; background: #f8fafc; padding: 4px 10px; border-radius: 4px; margin: 4px 12px 0 12px; border-left: 2.5px solid #0284c7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        <span style="font-weight: 600; color: #475569;">ข้อความต้นฉบับ:</span> <span id="sourceSnippetText"></span>
       </div>
       <div class="quick-answer-body" id="quickAnswerBody"></div>
     </div>

@@ -8,7 +8,7 @@ if (typeof marked !== 'undefined') {
   } catch (e) {}
 }
 
-// === 3 MAIN FLAGSHIP AI MODELS ===
+// === MAIN FLAGSHIP AI MODELS ===
 const AI_MODELS = [
   {
     id: 'gemini-3.8-flash',
@@ -33,11 +33,20 @@ const AI_MODELS = [
     tagClass: 'pro',
     defaultThinking: true,
     desc: 'โมเดลคิดวิเคราะห์เชิงลึกขั้นสูง (แนะนำ: เปิด Thinking สำหรับโจทย์ซับซ้อน)'
+  },
+  {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash',
+    tag: 'Turbo',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลความเร็วสูงพิเศษระดับเสี้ยววินาที ตอบไว แม่นยำ และเร็วที่สุด'
   }
 ];
 
-// Map 3 UI Model IDs to active Google AI Studio API endpoints
+// Map UI Model IDs to active Google AI Studio API endpoints
 const MODEL_API_ENDPOINT_MAP = {
+  'gemini-3-flash-preview': 'gemini-3-flash-preview',
   'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
@@ -222,6 +231,7 @@ let isDrawing = false;
 let isMoving = false;
 let isResizing = false;
 let activeHandle = null;
+let resizeAnchor = null;
 
 let startMouseX = 0, startMouseY = 0;
 let dragOffsetX = 0, dragOffsetY = 0;
@@ -382,6 +392,15 @@ async function reanalyzeWithNewModel() {
     if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length)) {
       currentAnalysisResult.ocr = data.ocrText;
     }
+    if (!currentAnalysisResult.summary && currentAnalysisResult.answer) {
+      currentAnalysisResult.summary = createQuickBulletSummary(currentAnalysisResult.answer);
+    }
+    const hasThaiInTr = currentAnalysisResult.translate && /[\u0E00-\u0E7F]/.test(currentAnalysisResult.translate);
+    const foreignSource = (currentAnalysisResult.ocr || currentAnalysisResult.answer || '').trim();
+    if (!hasThaiInTr && /[A-Za-z]/.test(foreignSource) && foreignSource.length > 5) {
+      currentAnalysisResult.translate = '';
+      triggerAutoTranslation(foreignSource);
+    }
     currentDisplayModelName = selectedModelNameText();
 
     // Render full conversation view with LaTeX math and copy buttons
@@ -442,6 +461,25 @@ function triggerAutoRefreshIfActive() {
   }
 }
 
+// Click outside modal-card on modal-overlay to dismiss
+function setupModalBackdropClose() {
+  const modals = [
+    { id: 'settingsModal', close: closeSettingsModal },
+    { id: 'historyModal', close: closeHistoryModal },
+    { id: 'promptEditorModal', close: closePromptEditorModal }
+  ];
+
+  modals.forEach(({ id, close }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', (e) => {
+      if (e.target === el) {
+        close();
+      }
+    });
+  });
+}
+
 // Initialize App
 async function initApp() {
   if (window.electronAPI) {
@@ -456,15 +494,33 @@ async function initApp() {
   setupHotkeyRecorder();
   setupMousePassthroughListeners();
   setupQuickTextKeyboardListener();
+  setupQuickTextContainerInteractions();
+  setupModalBackdropClose();
   resizeCanvasToVirtualScreen();
 }
 
-window.addEventListener('load', initApp);
-window.addEventListener('resize', resizeCanvasToVirtualScreen);
+let currentVirtualBounds = null;
 
-function resizeCanvasToVirtualScreen(bounds = null) {
-  let targetW = (bounds && typeof bounds.width === 'number' && bounds.width > 0) ? bounds.width : window.innerWidth;
-  let targetH = (bounds && typeof bounds.height === 'number' && bounds.height > 0) ? bounds.height : window.innerHeight;
+window.addEventListener('load', initApp);
+window.addEventListener('resize', () => resizeCanvasToVirtualScreen());
+
+function resizeCanvasToVirtualScreen() {
+  const bounds = arguments[0] || null;
+  if (bounds && typeof bounds.width === 'number' && bounds.width > 0 && typeof bounds.height === 'number' && bounds.height > 0) {
+    currentVirtualBounds = {
+      x: bounds.x || 0,
+      y: bounds.y || 0,
+      width: bounds.width,
+      height: bounds.height
+    };
+  }
+
+  const activeBounds = currentVirtualBounds;
+  let targetW = (activeBounds && activeBounds.width > 0) ? activeBounds.width : window.innerWidth;
+  let targetH = (activeBounds && activeBounds.height > 0) ? activeBounds.height : window.innerHeight;
+
+  if (window.outerWidth && window.outerWidth > targetW) targetW = window.outerWidth;
+  if (window.outerHeight && window.outerHeight > targetH) targetH = window.outerHeight;
 
   if (window.screen && typeof window.screen.width === 'number' && typeof window.screen.height === 'number') {
     targetW = Math.max(targetW, window.screen.width);
@@ -477,14 +533,18 @@ function resizeCanvasToVirtualScreen(bounds = null) {
   if (canvas.width !== targetW || canvas.height !== targetH) {
     canvas.width = targetW;
     canvas.height = targetH;
-    canvas.style.width = targetW + 'px';
-    canvas.style.height = targetH + 'px';
   }
+  canvas.style.position = 'fixed';
+  canvas.style.top = '0px';
+  canvas.style.left = '0px';
+  canvas.style.width = targetW + 'px';
+  canvas.style.height = targetH + 'px';
   drawScene();
 
-  if (!bounds && window.electronAPI && window.electronAPI.getDisplayBounds) {
+  if (!activeBounds && window.electronAPI && window.electronAPI.getDisplayBounds) {
     window.electronAPI.getDisplayBounds().then(b => {
       if (b) {
+        currentVirtualBounds = b;
         let bw = Math.max(b.width, (window.screen && window.screen.width) || b.width);
         let bh = Math.max(b.height, (window.screen && window.screen.height) || b.height);
         bw = Math.ceil(bw);
@@ -500,6 +560,10 @@ function resizeCanvasToVirtualScreen(bounds = null) {
     }).catch(() => {});
   }
 }
+
+try {
+  resizeCanvasToVirtualScreen();
+} catch (e) {}
 
 function populateModelDropdowns() {
   const dropdownMenu = document.getElementById('modelDropdownMenu');
@@ -522,34 +586,75 @@ function populateModelDropdowns() {
 }
 
 function setupElectronListeners() {
-  window.electronAPI.onStartSnipping((frames) => {
-    startSnippingUI(frames);
-  });
+  if (typeof window.electronAPI.onStartSnipping === 'function') {
+    window.electronAPI.onStartSnipping((frames) => {
+      startSnippingUI(frames);
+    });
+  }
 
-  if (window.electronAPI.onFreezeScreenSnapshot) {
+  if (typeof window.electronAPI.onFreezeScreenSnapshot === 'function') {
     window.electronAPI.onFreezeScreenSnapshot((frames) => {
       handleFreezeScreenSnapshot(frames);
     });
   }
 
-  window.electronAPI.onCancelSnipping(() => {
-    cancelSnippingUI(true);
-  });
+  if (typeof window.electronAPI.onCancelSnipping === 'function') {
+    window.electronAPI.onCancelSnipping(() => {
+      cancelSnippingUI(true);
+    });
+  }
 
-  window.electronAPI.onOpenSettings(() => {
-    openSettingsModal();
-  });
+  if (typeof window.electronAPI.onOpenSettings === 'function') {
+    window.electronAPI.onOpenSettings(() => {
+      openSettingsModal();
+    });
+  }
 
-  window.electronAPI.onOpenHistory(() => {
-    openHistoryModal();
-  });
+  if (typeof window.electronAPI.onOpenHistory === 'function') {
+    window.electronAPI.onOpenHistory(() => {
+      openHistoryModal();
+    });
+  }
 
-  window.electronAPI.onModelChangedFromTray((modelId) => {
+  if (typeof window.electronAPI.onModelChangedFromTray === 'function') {
+    window.electronAPI.onModelChangedFromTray((modelId) => {
     currentSelectedModel = modelId;
-    appSettings.defaultModel = modelId;
+    if (typeof selectedModalModelId !== 'undefined') {
+      selectedModalModelId = modelId;
+    }
+    if (appSettings) {
+      appSettings.defaultModel = modelId;
+    }
     populateModelDropdowns();
+    updateCustomModelDropdownUI(modelId);
+    const modalModelLabel = document.getElementById('modalSelectedModelName');
+    if (modalModelLabel) {
+      modalModelLabel.innerText = MODEL_DISPLAY_NAMES[modelId] || modelId;
+    }
     triggerAutoRefreshIfActive();
-  });
+    });
+  }
+
+  if (window.electronAPI.onModelChanged) {
+    window.electronAPI.onModelChanged((data) => {
+      const modelId = (typeof data === 'string') ? data : (data && data.modelId);
+      if (modelId) {
+        currentSelectedModel = modelId;
+        if (typeof selectedModalModelId !== 'undefined') {
+          selectedModalModelId = modelId;
+        }
+        if (appSettings) {
+          appSettings.defaultModel = modelId;
+        }
+        populateModelDropdowns();
+        updateCustomModelDropdownUI(modelId);
+        const modalModelLabel = document.getElementById('modalSelectedModelName');
+        if (modalModelLabel) {
+          modalModelLabel.innerText = MODEL_DISPLAY_NAMES[modelId] || modelId;
+        }
+      }
+    });
+  }
 
   if (window.electronAPI.onOpenQuickTextToolbar) {
     window.electronAPI.onOpenQuickTextToolbar((data) => {
@@ -583,16 +688,60 @@ function setupElectronListeners() {
 }
 
 // --- SNIPPING UI CONTROLLER ---
-function startSnippingUI() {
-  const bounds = arguments[0] || null;
+let frozenScreenImage = null;
+
+function loadFrozenScreenImage(dataUrl) {
+  if (!dataUrl) return;
+  // Native transparent overlay provides 100% sharp screen view without JPEG blur or dark mode color distortion.
+  // Preserving function signature for test suite compatibility.
+  frozenScreenImage = null;
+}
+
+// startSnippingUI() {
+function startSnippingUI(payload = null) {
+  let bounds = null;
+  let freezeDataUrl = null;
+
+  if (payload) {
+    if (payload.bounds || payload.freezeDataUrl) {
+      bounds = payload.bounds || null;
+      freezeDataUrl = payload.freezeDataUrl || null;
+    } else if (typeof payload.width === 'number' && typeof payload.height === 'number') {
+      bounds = payload;
+    } else if (typeof payload.x === 'number' && typeof payload.width === 'number') {
+      bounds = payload;
+    } else if (typeof payload === 'string' && payload.startsWith('data:image/')) {
+      freezeDataUrl = payload;
+    }
+  }
+
+  if (freezeDataUrl) {
+    loadFrozenScreenImage(freezeDataUrl);
+  } else {
+    frozenScreenImage = null;
+  }
+
+  window.scrollTo(0, 0);
+  if (document.body) {
+    document.body.scrollTop = 0;
+    document.body.scrollLeft = 0;
+  }
+  if (document.documentElement) {
+    document.documentElement.scrollTop = 0;
+    document.documentElement.scrollLeft = 0;
+  }
+
   document.body.classList.add('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
   isSnippingActive = true;
   box = { x: 0, y: 0, w: 0, h: 0 };
-  aiWindow.style.display = 'none';
-  aiWindow.style.visibility = 'hidden';
-  aiWindow.style.opacity = '0';
+  const aiWin = document.getElementById('aiWindow');
+  if (aiWin) {
+    aiWin.style.display = 'none';
+    aiWin.style.visibility = 'hidden';
+    aiWin.style.opacity = '0';
+  }
 
   const settingsModal = document.getElementById('settingsModal');
   if (settingsModal) {
@@ -613,6 +762,7 @@ function startSnippingUI() {
 
   canvas.style.display = 'block';
   canvas.style.backgroundImage = 'none';
+  currentAppliedCursor = null;
   setCanvasCursor('crosshair');
   if (topHint) topHint.style.display = 'none';
   if (percentBadge) percentBadge.style.display = 'none';
@@ -625,21 +775,26 @@ function startSnippingUI() {
 }
 
 function cancelSnippingUI(fromMain = false) {
+  document.body.classList.remove('toolbar-visible');
   document.body.classList.remove('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
   freezeFrames = [];
+  frozenScreenImage = null;
+  box = { x: 0, y: 0, w: 0, h: 0 };
   if (canvas) {
     canvas.style.backgroundImage = 'none';
   }
 
   if (!isSnippingActive && !isLaserScanning) {
+    hideSmartScreenToolbar(false);
     canvas.style.display = 'none';
     if (topHint) topHint.style.display = 'none';
     if (percentBadge) percentBadge.style.display = 'none';
     return;
   }
 
+  hideSmartScreenToolbar(false);
   isSnippingActive = false;
   isDrawing = false;
   isMoving = false;
@@ -647,6 +802,7 @@ function cancelSnippingUI(fromMain = false) {
   activeHandle = null;
   box = { x: 0, y: 0, w: 0, h: 0 };
   canvas.style.display = 'none';
+  currentAppliedCursor = null;
   setCanvasCursor('default');
   if (topHint) topHint.style.display = 'none';
   if (percentBadge) percentBadge.style.display = 'none';
@@ -665,18 +821,33 @@ function cancelSnippingUI(fromMain = false) {
   }
 }
 
-const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Cline x1='16.5' y1='1' x2='16.5' y2='32' stroke='%23000000' stroke-opacity='0.75' stroke-width='3.2' stroke-linecap='square'/%3E%3Cline x1='1' y1='16.5' x2='32' y2='16.5' stroke='%23000000' stroke-opacity='0.75' stroke-width='3.2' stroke-linecap='square'/%3E%3Cline x1='16.5' y1='2' x2='16.5' y2='31' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='square'/%3E%3Cline x1='2' y1='16.5' x2='31' y2='16.5' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='square'/%3E%3C/svg%3E\") 16 16, crosshair";
+const SNIP_CLEAN_CROSSHAIR_CURSOR = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21' viewBox='0 0 21 21'%3E%3Cline x1='10.5' y1='1' x2='10.5' y2='20' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3Cline x1='1' y1='10.5' x2='20' y2='10.5' stroke='%23000000' stroke-width='1.2' stroke-linecap='square'/%3E%3C/svg%3E\") 10 10, crosshair";
 
 let freezeFrames = [];
 
 function handleFreezeScreenSnapshot(frames) {
+  const url = (typeof frames === 'string')
+    ? frames
+    : (frames && frames.freezeDataUrl)
+      ? frames.freezeDataUrl
+      : (Array.isArray(frames) && frames[0] && frames[0].dataUrl)
+        ? frames[0].dataUrl
+        : null;
+
+  if (url) {
+    loadFrozenScreenImage(url);
+  }
   if (canvas) {
     canvas.style.backgroundImage = 'none';
   }
   requestDrawScene();
 }
 
+let currentAppliedCursor = null;
+
 function setCanvasCursor(newCursor) {
+  if (currentAppliedCursor === newCursor) return;
+  currentAppliedCursor = newCursor;
   const targetCursor = (newCursor === 'crosshair') ? SNIP_CLEAN_CROSSHAIR_CURSOR : newCursor;
   if (canvas && canvas.style.cursor !== newCursor) {
     if (canvas.style.cursor !== targetCursor) {
@@ -685,16 +856,95 @@ function setCanvasCursor(newCursor) {
   }
 }
 
-// Escape key listener during active window focus
+// Universal digit extractor supporting Physical KeyCodes (Digit1-8, Numpad1-8), Standard Digits (1-8),
+// and Thai Kedmanee Keyboard Layout top row keys (ๅ, /, -, ภ, ถ, ุ, ึ, ค)
+function getDigitFromKeyEvent(e) {
+  if (!e) return null;
+  // 1. Physical key code (independent of keyboard language / OS layout)
+  if (e.code) {
+    const digitMatch = e.code.match(/^Digit([1-8])$/);
+    if (digitMatch) return parseInt(digitMatch[1], 10);
+    const numpadMatch = e.code.match(/^Numpad([1-8])$/);
+    if (numpadMatch) return parseInt(numpadMatch[1], 10);
+  }
+  // 2. Standard ASCII digit character
+  if (typeof e.key === 'string' && e.key >= '1' && e.key <= '8') {
+    return parseInt(e.key, 10);
+  }
+  // 3. Thai Kedmanee top row keyboard mapping (1-8):
+  // 1=ๅ, 2=/, 3=-, 4=ภ, 5=ถ, 6=ุ, 7=ึ, 8=ค
+  const thaiDigitMap = {
+    'ๅ': 1, '/': 2, '-': 3, 'ภ': 4,
+    'ถ': 5, 'ุ': 6, 'ึ': 7, 'ค': 8
+  };
+  if (e.key && thaiDigitMap[e.key]) {
+    return thaiDigitMap[e.key];
+  }
+  return null;
+}
+
+function isCustomQuestionKeyEvent(e) {
+  if (!e) return false;
+  if (e.key === '?' || e.key === 'ฦ') return true;
+  if (e.key === '/' && (!e.code || e.code === 'Slash')) return true;
+  if (e.code === 'Slash' && (e.shiftKey || !e.ctrlKey)) return true;
+  return false;
+}
+
+// Escape key listener and category hotkeys during active window focus
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key === 'Esc') {
+    e.preventDefault();
     if (isSnippingActive) {
       cancelSnippingUI();
+      return;
+    }
+    const promptModal = document.getElementById('promptEditorModal');
+    const settingsModal = document.getElementById('settingsModal');
+    const historyModal = document.getElementById('historyModal');
+    if (promptModal && (promptModal.style.display === 'flex' || window.getComputedStyle(promptModal).display === 'flex')) {
+      closePromptEditorModal();
+    } else if (settingsModal && (settingsModal.style.display === 'flex' || window.getComputedStyle(settingsModal).display === 'flex')) {
+      closeSettingsModal();
+    } else if (historyModal && (historyModal.style.display === 'flex' || window.getComputedStyle(historyModal).display === 'flex')) {
+      closeHistoryModal();
+    } else if (aiWindow && (aiWindow.style.display === 'flex' || window.getComputedStyle(aiWindow).display === 'flex')) {
+      closeAiWindow();
+    }
+    return;
+  }
+
+  // Category hotkeys (1-8 and ?) when selection area is active (Standard Digits, Numpad, and Thai layout)
+  if (isSnippingActive && box && box.w >= 10 && box.h >= 10) {
+    const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    if (tag !== 'input' && tag !== 'textarea') {
+      const digit = getDigitFromKeyEvent(e);
+      if (digit !== null && digit >= 1 && digit <= 8) {
+        e.preventDefault();
+        e.stopPropagation();
+        const digitIndex = digit - 1;
+        executeScreenPromptByIndex(digitIndex);
+        return;
+      } else if (isCustomQuestionKeyEvent(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleQuickCustomInput(true);
+        return;
+      }
+    }
+  }
+
+  // Full Screen Snip Shortcut (Enter or Space while in snipping mode without selection)
+  if (isSnippingActive && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault();
+    if (box && box.w >= 10 && box.h >= 10) {
+      executeScreenPrompt('answer');
     } else {
-      const settingsModal = document.getElementById('settingsModal');
-      const historyModal = document.getElementById('historyModal');
-      if (settingsModal && settingsModal.style.display === 'flex') closeSettingsModal();
-      else if (historyModal && historyModal.style.display === 'flex') closeHistoryModal();
+      box = { x: 0, y: 0, w: canvas.width, h: canvas.height };
+      isSnippingActive = false;
+      if (topHint) topHint.style.display = 'none';
+      stopLaserScan();
+      processScreenCapture(box);
     }
     return;
   }
@@ -721,6 +971,22 @@ function requestDrawScene() {
 }
 
 // --- MOUSE CANVAS EVENTS ---
+// Double-click to instantly capture entire full screen and taskbar
+canvas.addEventListener('dblclick', (e) => {
+  if (!isSnippingActive) return;
+  e.preventDefault();
+  box = { x: 0, y: 0, w: canvas.width, h: canvas.height };
+  const selectedBox = { ...box };
+  isSnippingActive = false;
+  stopLaserScan();
+  stopSpeechSynthesis();
+  if (percentBadge) percentBadge.style.display = 'none';
+  if (canvas) canvas.style.display = 'none';
+  if (topHint) topHint.style.display = 'none';
+  document.body.classList.remove('snipping-active');
+  processScreenCapture(selectedBox);
+});
+
 canvas.addEventListener('mousedown', (e) => {
   if (!isSnippingActive) return;
   if (e.button === 2) { // Right click cancel
@@ -740,7 +1006,14 @@ canvas.addEventListener('mousedown', (e) => {
     isResizing = true;
     startMouseX = mx;
     startMouseY = my;
-    setCanvasCursor((activeHandle === 'tl' || activeHandle === 'br') ? 'nwse-resize' : 'nesw-resize');
+    resizeAnchor = {
+      left: box.x,
+      top: box.y,
+      right: box.x + box.w,
+      bottom: box.y + box.h
+    };
+    setCanvasCursor(getCursorForHandle(activeHandle));
+    hideSmartScreenToolbar(true);
     requestDrawScene();
     return;
   }
@@ -750,6 +1023,7 @@ canvas.addEventListener('mousedown', (e) => {
     dragOffsetX = mx - box.x;
     dragOffsetY = my - box.y;
     setCanvasCursor('move');
+    hideSmartScreenToolbar(true);
     requestDrawScene();
     return;
   }
@@ -758,6 +1032,7 @@ canvas.addEventListener('mousedown', (e) => {
   startMouseX = mx;
   startMouseY = my;
   box = { x: mx, y: my, w: 0, h: 0 };
+  hideSmartScreenToolbar(false);
   setCanvasCursor('crosshair');
   drawScene();
 });
@@ -778,7 +1053,7 @@ canvas.addEventListener('mousemove', (e) => {
   if (!isDrawing && !isMoving && !isResizing) {
     const handle = getHandleAt(mx, my);
     if (handle) {
-      setCanvasCursor((handle === 'tl' || handle === 'br') ? 'nwse-resize' : 'nesw-resize');
+      setCanvasCursor(getCursorForHandle(handle));
     } else if (isInsideBox(mx, my) && box.w > 0) {
       setCanvasCursor('move');
     } else {
@@ -788,50 +1063,116 @@ canvas.addEventListener('mousemove', (e) => {
   }
 
   if (isResizing) {
+    if (!resizeAnchor) return;
+    let curX = Math.max(0, Math.min(canvas.width, mx));
+    let curY = Math.max(0, Math.min(canvas.height, my));
+
+    // Magnetic edge snapping for border precision
+    const SNAP_PX = 14;
+    if (curX <= SNAP_PX) curX = 0;
+    else if (curX >= canvas.width - SNAP_PX) curX = canvas.width;
+
+    if (curY <= SNAP_PX) curY = 0;
+    else if (curY >= canvas.height - SNAP_PX) curY = canvas.height;
+
+    let nextX = box.x;
+    let nextY = box.y;
+    let nextW = box.w;
+    let nextH = box.h;
+
+    // Fully unrestricted 8-directional resizing: can cross over opposing edges in any direction
+    // (e.g. dragging bottom upwards above top, dragging left rightwards past right, etc.)
     if (activeHandle === 'tl') {
-      const curX = Math.min(box.x + box.w - 8, Math.max(0, mx));
-      const curY = Math.min(box.y + box.h - 8, Math.max(0, my));
-      box.w += box.x - curX;
-      box.h += box.y - curY;
-      box.x = curX;
-      box.y = curY;
+      nextX = Math.min(resizeAnchor.right, curX);
+      nextY = Math.min(resizeAnchor.bottom, curY);
+      nextW = Math.abs(resizeAnchor.right - curX);
+      nextH = Math.abs(resizeAnchor.bottom - curY);
     } else if (activeHandle === 'tr') {
-      const curX = Math.max(box.x + 8, Math.min(canvas.width, mx));
-      const curY = Math.min(box.y + box.h - 8, Math.max(0, my));
-      box.w = curX - box.x;
-      box.h += box.y - curY;
-      box.y = curY;
+      nextX = Math.min(resizeAnchor.left, curX);
+      nextY = Math.min(resizeAnchor.bottom, curY);
+      nextW = Math.abs(curX - resizeAnchor.left);
+      nextH = Math.abs(resizeAnchor.bottom - curY);
     } else if (activeHandle === 'bl') {
-      const curX = Math.min(box.x + box.w - 8, Math.max(0, mx));
-      const curY = Math.max(box.y + 8, Math.min(canvas.height, my));
-      box.w += box.x - curX;
-      box.x = curX;
-      box.h = curY - box.y;
+      nextX = Math.min(resizeAnchor.right, curX);
+      nextY = Math.min(resizeAnchor.top, curY);
+      nextW = Math.abs(resizeAnchor.right - curX);
+      nextH = Math.abs(curY - resizeAnchor.top);
     } else if (activeHandle === 'br') {
-      const curX = Math.max(box.x + 8, Math.min(canvas.width, mx));
-      const curY = Math.max(box.y + 8, Math.min(canvas.height, my));
-      box.w = curX - box.x;
-      box.h = curY - box.y;
+      nextX = Math.min(resizeAnchor.left, curX);
+      nextY = Math.min(resizeAnchor.top, curY);
+      nextW = Math.abs(curX - resizeAnchor.left);
+      nextH = Math.abs(curY - resizeAnchor.top);
+    } else if (activeHandle === 'tc') {
+      // Top center: free vertical drag (can drag downwards past bottom edge)
+      nextX = resizeAnchor.left;
+      nextW = resizeAnchor.right - resizeAnchor.left;
+      nextY = Math.min(resizeAnchor.bottom, curY);
+      nextH = Math.abs(resizeAnchor.bottom - curY);
+    } else if (activeHandle === 'bc') {
+      // Bottom center: free vertical drag (can drag upwards past top edge - ลากจากล่างขึ้นบน)
+      nextX = resizeAnchor.left;
+      nextW = resizeAnchor.right - resizeAnchor.left;
+      nextY = Math.min(resizeAnchor.top, curY);
+      nextH = Math.abs(curY - resizeAnchor.top);
+    } else if (activeHandle === 'ml') {
+      // Middle left: free horizontal drag (can drag rightwards past right edge - ลากจากซ้ายไปขวา)
+      nextY = resizeAnchor.top;
+      nextH = resizeAnchor.bottom - resizeAnchor.top;
+      nextX = Math.min(resizeAnchor.right, curX);
+      nextW = Math.abs(resizeAnchor.right - curX);
+    } else if (activeHandle === 'mr') {
+      // Middle right: free horizontal drag (can drag leftwards past left edge)
+      nextY = resizeAnchor.top;
+      nextH = resizeAnchor.bottom - resizeAnchor.top;
+      nextX = Math.min(resizeAnchor.left, curX);
+      nextW = Math.abs(curX - resizeAnchor.left);
     }
-    requestDrawScene();
+
+    if (nextX !== box.x || nextY !== box.y || nextW !== box.w || nextH !== box.h) {
+      box.x = nextX;
+      box.y = nextY;
+      box.w = nextW;
+      box.h = nextH;
+      requestDrawScene();
+    }
     return;
   }
 
   if (isMoving) {
-    box.x = Math.max(0, Math.min(mx - dragOffsetX, canvas.width - box.w));
-    box.y = Math.max(0, Math.min(my - dragOffsetY, canvas.height - box.h));
-    requestDrawScene();
+    const nextX = Math.max(0, Math.min(mx - dragOffsetX, canvas.width - box.w));
+    const nextY = Math.max(0, Math.min(my - dragOffsetY, canvas.height - box.h));
+    if (nextX !== box.x || nextY !== box.y) {
+      box.x = nextX;
+      box.y = nextY;
+      requestDrawScene();
+    }
     return;
   }
 
   if (isDrawing) {
-    const curX = Math.max(0, Math.min(canvas.width, mx));
-    const curY = Math.max(0, Math.min(canvas.height, my));
-    box.x = Math.min(startMouseX, curX);
-    box.y = Math.min(startMouseY, curY);
-    box.w = Math.abs(curX - startMouseX);
-    box.h = Math.abs(curY - startMouseY);
-    requestDrawScene();
+    let curX = Math.max(0, Math.min(canvas.width, mx));
+    let curY = Math.max(0, Math.min(canvas.height, my));
+
+    // Magnetic edge snapping for easy full-screen and edge-to-edge taskbar coverage
+    const SNAP_PX = 14;
+    if (curX <= SNAP_PX) curX = 0;
+    else if (curX >= canvas.width - SNAP_PX) curX = canvas.width;
+
+    if (curY <= SNAP_PX) curY = 0;
+    else if (curY >= canvas.height - SNAP_PX) curY = canvas.height;
+
+    const nextX = Math.min(startMouseX, curX);
+    const nextY = Math.min(startMouseY, curY);
+    const nextW = Math.abs(curX - startMouseX);
+    const nextH = Math.abs(curY - startMouseY);
+
+    if (nextX !== box.x || nextY !== box.y || nextW !== box.w || nextH !== box.h) {
+      box.x = nextX;
+      box.y = nextY;
+      box.w = nextW;
+      box.h = nextH;
+      requestDrawScene();
+    }
   }
 });
 
@@ -845,15 +1186,19 @@ window.addEventListener('mouseup', async (e) => {
     isDrawing = false;
     isMoving = false;
     isResizing = false;
+    resizeAnchor = null;
     activeHandle = null;
 
     if (box.w >= 8 && box.h >= 8) {
-      isSnippingActive = false;
-      topHint.style.display = 'none';
-      stopLaserScan();
-      processScreenCapture(box);
+      isSnippingActive = true;
+      if (canvas) canvas.style.display = 'block';
+      showSmartScreenToolbar(box);
+      requestDrawScene();
+      // processScreenCapture(box);
+      // processScreenCapture(selectedBox);
     } else {
       box = { x: 0, y: 0, w: 0, h: 0 };
+      hideSmartScreenToolbar(false);
       setCanvasCursor('crosshair');
       requestDrawScene();
     }
@@ -861,17 +1206,43 @@ window.addEventListener('mouseup', async (e) => {
 });
 
 function getHandleAt(mx, my) {
-  const radius = 9;
-  const corners = {
+  if (!box || box.w < 10 || box.h < 10) return null;
+  const radius = 10;
+  const halfW = box.w / 2;
+  const halfH = box.h / 2;
+  const handles = {
     tl: { x: box.x, y: box.y },
+    tc: { x: box.x + halfW, y: box.y },
     tr: { x: box.x + box.w, y: box.y },
+    ml: { x: box.x, y: box.y + halfH },
+    mr: { x: box.x + box.w, y: box.y + halfH },
     bl: { x: box.x, y: box.y + box.h },
+    bc: { x: box.x + halfW, y: box.y + box.h },
     br: { x: box.x + box.w, y: box.y + box.h }
   };
-  for (let key in corners) {
-    if (Math.hypot(mx - corners[key].x, my - corners[key].y) <= radius) return key;
+  for (let key in handles) {
+    if (Math.hypot(mx - handles[key].x, my - handles[key].y) <= radius) return key;
   }
   return null;
+}
+
+function getCursorForHandle(handle) {
+  switch (handle) {
+    case 'tl':
+    case 'br':
+      return 'nwse-resize';
+    case 'tr':
+    case 'bl':
+      return 'nesw-resize';
+    case 'tc':
+    case 'bc':
+      return 'ns-resize';
+    case 'ml':
+    case 'mr':
+      return 'ew-resize';
+    default:
+      return 'crosshair';
+  }
 }
 
 function isInsideBox(mx, my) {
@@ -885,35 +1256,41 @@ function drawScene() {
     return;
   }
 
-  // 1. Stable, uniform dark dim overlay strictly on the unselected region
+  // 1. Pristine frozen screen image (Eliminates video blooming, transparency washout and freezes screen)
+  if (frozenScreenImage && frozenScreenImage.complete && frozenScreenImage.naturalWidth > 0) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(frozenScreenImage, 0, 0, canvas.width, canvas.height);
+  }
+  if (freezeFrames && freezeFrames.length > 0) {
+    freezeFrames.forEach(f => {
+      if (f && f.img) ctx.drawImage(f.img, f.x, f.y, f.width, f.height);
+    });
+  }
+
+  // 2. Stable, uniform dark dim overlay strictly on the unselected region
   ctx.save();
   ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
 
   if (box.w > 0 && box.h > 0) {
-    // Cut out the selected crop box using evenodd fill rule.
-    // The outer rect covers the entire canvas (including full taskbar height).
-    // The inner rect creates a 100% transparent cutout hole with 0 alpha.
-    // Inside this cutout box, the user's native screen shows through with:
-    // - 100% original color fidelity (not dark, not faded)
-    // - 100% native sharpness (no blur, no DPI compression artifacts)
-    // - Zero filter or opacity covering the selected region
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, canvas.height);
     ctx.rect(box.x, box.y, box.w, box.h);
     ctx.fill('evenodd');
+    ctx.clearRect(box.x, box.y, box.w, box.h);
   } else {
-    // When no selection box is active yet, darken the entire screen uniformly
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
   ctx.restore();
 
-  // 2. Crisp dashed selection border around the cut-out box matching Image 3
+  // 3. Crisp dashed selection border around the cut-out box matching Image 3
   if (box.w > 0 && box.h > 0) {
     ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
-    ctx.shadowBlur = 2;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
+    if (!isDrawing && !isMoving && !isResizing) {
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+      ctx.shadowBlur = 2;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
@@ -927,7 +1304,39 @@ function drawScene() {
 }
 
 function drawInteractiveHandles(x, y, w, h) {
-  // Handles removed to match clean dashed border design
+  if (w < 14 || h < 14) return;
+  const halfW = w / 2;
+  const halfH = h / 2;
+  const handles = [
+    { x: x, y: y },
+    { x: x + halfW, y: y },
+    { x: x + w, y: y },
+    { x: x, y: y + halfH },
+    { x: x + w, y: y + halfH },
+    { x: x, y: y + h },
+    { x: x + halfW, y: y + h },
+    { x: x + w, y: y + h }
+  ];
+
+  ctx.save();
+  for (let i = 0; i < handles.length; i++) {
+    const pt = handles[i];
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
+
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#0284c7';
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawGradientLaser() {
@@ -966,6 +1375,20 @@ function updatePercentBadgePos() {
   if (percentBadge) percentBadge.style.display = 'none';
 }
 
+// Rogue foreign script detector & sanitizer
+// Strips accidental cross-script token bleeds (Arabic, Hebrew, Devanagari, etc.)
+// from Thai and English AI responses while preserving genuine Thai, English, numbers, math, and code.
+const ROGUE_FOREIGN_SCRIPT_REGEX = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u0D7F\u0F00-\u109F\u1780-\u17FF]+/g;
+
+function sanitizeRogueForeignScripts(text, allowForeign = false) {
+  if (!text || typeof text !== 'string') return '';
+  if (allowForeign) return text;
+  let clean = text.replace(ROGUE_FOREIGN_SCRIPT_REGEX, '');
+  clean = clean.replace(/เพื่อย(?=การ)/g, 'เพื่อ');
+  clean = clean.replace(/[ \t]{2,}/g, ' ');
+  return clean;
+}
+
 // --- STREAMING SECTION PARSER & REAL-TIME RENDERER ---
 let isStreamingActive = false;
 let accumulatedStreamText = '';
@@ -982,14 +1405,14 @@ function parseStreamSections(text) {
 
   if (!text) return sections;
 
-  // Normalized delimiter tags (matches ### [ANSWER], [OCR], Thai & English headers)
+  // Normalized delimiter tags (matches left-to-right UI tabs: Answer -> Explain -> Summary -> Translate -> OCR)
   const tags = [
     { key: 'answer', pattern: /###?\s*\[?(?:ANSWER|คำตอบ|คำตอบหลัก)\]?|\*\*\[?(?:ANSWER|คำตอบ)\]?\*\*/i },
-    { key: 'ocr', pattern: /###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?|\*\*\[?(?:OCR|TEXT|ถอดข้อความ)\]?\*\*/i },
-    { key: 'thinking_process', pattern: /###?\s*\[?(?:THINKING(?:_PROCESS)?|กระบวนการคิด)\]?|\*\*\[?(?:THINKING|กระบวนการคิด)\]?\*\*/i },
     { key: 'explain', pattern: /###?\s*\[?(?:EXPLAIN|EXPLANATION|คำอธิบาย|อธิบาย|อธิบายเชิงลึก)\]?|\*\*\[?(?:EXPLAIN|คำอธิบาย)\]?\*\*/i },
     { key: 'summary', pattern: /###?\s*\[?(?:SUMMARY|สรุป|สรุปประเด็น|สรุปประเด็นสำคัญ)\]?|\*\*\[?(?:SUMMARY|สรุป)\]?\*\*/i },
-    { key: 'translate', pattern: /###?\s*\[?(?:TRANSLATE|TRANSLATION|คำแปล|แปลไทย|แปลภาษา|แปล)\]?|\*\*\[?(?:TRANSLATE|แปลไทย)\]?\*\*/i }
+    { key: 'translate', pattern: /###?\s*\[?(?:TRANSLATE|TRANSLATION|คำแปล|แปลไทย|แปลภาษา|แปล)\]?|\*\*\[?(?:TRANSLATE|แปลไทย)\]?\*\*/i },
+    { key: 'thinking_process', pattern: /###?\s*\[?(?:THINKING(?:_PROCESS)?|กระบวนการคิด)\]?|\*\*\[?(?:THINKING|กระบวนการคิด)\]?\*\*/i },
+    { key: 'ocr', pattern: /###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?|\*\*\[?(?:OCR|TEXT|ถอดข้อความ)\]?\*\*/i }
   ];
 
   const matches = [];
@@ -1004,13 +1427,13 @@ function parseStreamSections(text) {
 
   if (matches.length === 0) {
     // If no header tag detected yet, all incoming text is assumed to be answer
-    sections.answer = text.trim();
+    sections.answer = sanitizeRogueForeignScripts(text.trim());
     return sections;
   }
 
   // Pre-header content (if any)
   if (matches[0].index > 0) {
-    sections.answer = text.substring(0, matches[0].index).trim();
+    sections.answer = sanitizeRogueForeignScripts(text.substring(0, matches[0].index).trim());
   }
 
   for (let i = 0; i < matches.length; i++) {
@@ -1021,6 +1444,9 @@ function parseStreamSections(text) {
 
     let chunk = text.substring(startIndex, endIndex);
     chunk = chunk.replace(curr.pattern, '').trim();
+    if (curr.key !== 'ocr') {
+      chunk = sanitizeRogueForeignScripts(chunk);
+    }
     sections[curr.key] = chunk;
   }
 
@@ -1036,13 +1462,112 @@ function createQuickBulletSummary(text) {
   return sentences.slice(0, 3).map(s => `- ${s}`).join('\n');
 }
 
+let isTranslatingOcr = false;
+
+function triggerAutoTranslation(sourceText) {
+  if (isTranslatingOcr || !sourceText) return;
+  const cleanSource = sourceText.trim();
+  if (!cleanSource || cleanSource === '(ไม่มีข้อความในภาพ)' || cleanSource.includes('ไม่พบข้อความตัวอักษร')) return;
+  isTranslatingOcr = true;
+  if (activeCategory === 'translate') {
+    if (isStreamingActive) {
+      scheduleScreenStreamRender();
+    } else {
+      renderConversationView();
+    }
+  }
+  if (window.electronAPI && window.electronAPI.quickTextAsk) {
+    window.electronAPI.quickTextAsk({
+      promptText: `คุณคือนักแปลภาษาระดับมืออาชีพ จงแปลข้อความต่อไปนี้เป็นภาษาไทยโดยตรงเท่านั้น แปลตรงตัวตามต้นฉบับประโยคต่อประโยค ย่อหน้าต่อย่อหน้า ครบถ้วนทุกประโยค แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำเด็ดขาด ห้ามแต่งเติมหัวข้อใหม่ พร้อมรักษารูปแบบและองค์ประกอบ (Layout & Spatial Composition) ให้ตรงตามต้นฉบับ เช่น การขึ้นบรรทัดใหม่ การเว้นวรรค หัวข้อ รายการข้อ (Bullet points) และตาราง Markdown เพื่อให้อ่านง่าย สบายตา ห้ามสรุป ห้ามอธิบาย และห้ามตัดทอนข้อความใดๆ (หากต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษ):\n\n${cleanSource}`
+    }).then(res => {
+      if (res && res.fullText && res.fullText.trim()) {
+        const cleanTr = sanitizeRogueForeignScripts(res.fullText.trim());
+        if (cleanTr && /[\u0E00-\u0E7F]/.test(cleanTr)) {
+          currentAnalysisResult.translate = cleanTr;
+        }
+      }
+    }).catch(err => {
+      console.warn('Auto translation error:', err);
+    }).finally(() => {
+      isTranslatingOcr = false;
+      if (activeCategory === 'translate') {
+        if (isStreamingActive) {
+          scheduleScreenStreamRender();
+        } else {
+          renderConversationView();
+        }
+      }
+    });
+  }
+}
+
+let isFetchingOcr = false;
+let isFetchingExplain = false;
+
+function triggerAutoOcr() {
+  if (isFetchingOcr || !currentCroppedBase64) return;
+  isFetchingOcr = true;
+  if (activeCategory === 'ocr') {
+    if (isStreamingActive) scheduleScreenStreamRender();
+    else renderConversationView();
+  }
+  if (window.electronAPI && window.electronAPI.fetchCategory) {
+    window.electronAPI.fetchCategory({
+      base64Data: currentCroppedBase64,
+      category: 'ocr',
+      modelId: currentSelectedModel || 'gemini-3-flash-preview'
+    }).then(res => {
+      if (res && res.text) {
+        currentAnalysisResult.ocr = res.text.trim();
+      }
+    }).catch(err => {
+      console.warn('Auto OCR error:', err);
+    }).finally(() => {
+      isFetchingOcr = false;
+      if (activeCategory === 'ocr') {
+        if (isStreamingActive) scheduleScreenStreamRender();
+        else renderConversationView();
+      }
+    });
+  }
+}
+
+function triggerAutoExplain() {
+  if (isFetchingExplain || !currentCroppedBase64) return;
+  isFetchingExplain = true;
+  if (activeCategory === 'explain') {
+    if (isStreamingActive) scheduleScreenStreamRender();
+    else renderConversationView();
+  }
+  if (window.electronAPI && window.electronAPI.fetchCategory) {
+    window.electronAPI.fetchCategory({
+      base64Data: currentCroppedBase64,
+      category: 'explain',
+      contextAnswer: currentAnalysisResult?.answer || '',
+      modelId: currentSelectedModel || 'gemini-3-flash-preview'
+    }).then(res => {
+      if (res && res.text) {
+        currentAnalysisResult.explain = res.text.trim();
+      }
+    }).catch(err => {
+      console.warn('Auto Explain error:', err);
+    }).finally(() => {
+      isFetchingExplain = false;
+      if (activeCategory === 'explain') {
+        if (isStreamingActive) scheduleScreenStreamRender();
+        else renderConversationView();
+      }
+    });
+  }
+}
+
 function cleanThaiTranslation(raw) {
   if (!raw) return '';
   const text = raw.trim();
 
-  // If text does not contain Thai, return as is
+  // If text does not contain Thai, return empty string so untranslated raw foreign text is never displayed as Thai translation
   const hasThai = /[\u0E00-\u0E7F]/.test(text);
-  if (!hasThai) return text;
+  if (!hasThai) return '';
 
   // 1. Check if text is divided by horizontal rule or markdown line dividers
   const hrParts = text.split(/\n\s*[-*_]{3,}\s*\n/);
@@ -1080,13 +1605,45 @@ function cleanThaiTranslation(raw) {
   return text;
 }
 
+function isCategoryFinished(cat, accumulatedText, isStreamDone) {
+  if (isStreamDone) return true;
+  if (!accumulatedText) return false;
+
+  const nextPatterns = {
+    answer: /###?\s*\[?(?:EXPLAIN|EXPLANATION|คำอธิบาย|SUMMARY|สรุป|TRANSLATE|คำแปล|แปลไทย|แปลภาษา|แปล|OCR|TEXT|ถอดข้อความ)\b/i,
+    explain: /###?\s*\[?(?:SUMMARY|สรุป|TRANSLATE|คำแปล|แปลไทย|แปลภาษา|แปล|OCR|TEXT|ถอดข้อความ)\b/i,
+    summary: /###?\s*\[?(?:TRANSLATE|คำแปล|แปลไทย|แปลภาษา|แปล|OCR|TEXT|ถอดข้อความ)\b/i,
+    translate: /###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\b/i,
+    ocr: null
+  };
+
+  const pattern = nextPatterns[cat];
+  if (!pattern) return false;
+  return pattern.test(accumulatedText);
+}
+
+function updateCategoryTabsProgress() {
+  const categories = ['answer', 'explain', 'summary', 'translate', 'ocr'];
+  categories.forEach(cat => {
+    const isDone = isCategoryFinished(cat, (typeof accumulatedStreamText !== 'undefined') ? accumulatedStreamText : '', !isStreamingActive);
+    const btn = document.querySelector(`.tab-btn[onclick*="'${cat}'"]`);
+    if (btn) {
+      if (isDone) {
+        btn.classList.add('category-finished');
+      } else {
+        btn.classList.remove('category-finished');
+      }
+    }
+  });
+}
+
 function getCategoryContent(cat, result) {
   if (!result) return '';
 
-  const ans = (result.answer || '').trim();
-  const exp = (result.explain || '').trim();
-  const sum = (result.summary || '').trim();
-  const tr = (result.translate || '').trim();
+  const ans = sanitizeRogueForeignScripts(result.answer || '').trim();
+  const exp = sanitizeRogueForeignScripts(result.explain || '').trim();
+  const sum = sanitizeRogueForeignScripts(result.summary || '').trim();
+  const tr = sanitizeRogueForeignScripts(result.translate || '').trim();
   const ocrText = (result.ocr || '').trim();
 
   switch (cat) {
@@ -1096,34 +1653,45 @@ function getCategoryContent(cat, result) {
     case 'explain':
       if (exp) return exp;
       if (!isStreamingActive && ans) return ans;
-      return isStreamingActive ? '' : '_*(ไม่พบคำอธิบายเพิ่มเติม)*_';
+      if (typeof isFetchingExplain !== 'undefined' && isFetchingExplain) {
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังสร้างคำอธิบายเชิงลึก...</div>`;
+      }
+      return isStreamingActive ? '' : '_*(ไม่มีคำอธิบายเพิ่มเติมสำหรับภาพนี้)*_';
 
     case 'summary':
       if (sum) {
-        return `### คำตอบหลัก\n${ans || '...'}\n\n---\n\n### สรุปประเด็นสำคัญ\n${sum}`;
+        return sum;
       }
       if (!isStreamingActive && ans) {
-        return `### คำตอบหลัก\n${ans}\n\n---\n\n### สรุปประเด็นสำคัญ\n${createQuickBulletSummary(ans)}`;
+        return createQuickBulletSummary(ans);
       }
       return isStreamingActive ? '' : '_*(ไม่มีข้อความสรุป)*_';
 
     case 'translate':
-      if (tr) return cleanThaiTranslation(tr);
-      if (typeof isTranslatingOcr !== 'undefined' && isTranslatingOcr) {
-        return `
-          <div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;">
-            <svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
-            กำลังแปลข้อความเป็นภาษาไทย...
-          </div>
-        `;
+      if (tr) {
+        const cleaned = cleanThaiTranslation(tr);
+        if (cleaned) return cleaned;
       }
       if (!isStreamingActive && ans) return ans;
-      return isStreamingActive ? '' : '_*(ไม่มีข้อความสำหรับแปลภาษา)*_';
+      if (typeof isTranslatingOcr !== 'undefined' && isTranslatingOcr) {
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความเป็นภาษาไทย...</div>`;
+      }
+      if (isStreamingActive) {
+        return '';
+      }
+      // If stream finished and translation is empty or not Thai, check if source has foreign characters
+      const foreignSource = (ocrText || ans || '').trim();
+      if (/[A-Za-z]/.test(foreignSource) && foreignSource.length > 5) {
+        setTimeout(() => triggerAutoTranslation(foreignSource), 10);
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความเป็นภาษาไทย...</div>`;
+      }
+      return '_*(ไม่มีข้อความสำหรับแปลภาษา)*_';
 
     case 'ocr':
       if (ocrText && ocrText.length > 3 && !/^[\s\uD800-\uDBFF\uDC00-\uDFFF\u2600-\u27BF\uD83D\uDD17]+$/.test(ocrText)) return ocrText;
-      if (tr && tr.length > 5) return tr;
-      if (!isStreamingActive && ans) return ans;
+      if (typeof isFetchingOcr !== 'undefined' && isFetchingOcr) {
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังถอดข้อความตัวอักษร (OCR)...</div>`;
+      }
       return isStreamingActive ? '' : '*(ไม่พบข้อความตัวอักษรที่ถอดได้จากภาพนี้)*';
 
     default:
@@ -1146,29 +1714,34 @@ function scheduleScreenStreamRender() {
 
 function renderStreamingContent() {
   const target = document.getElementById('liveStreamingContent');
-  if (!target || !hasReceivedFirstToken) return;
+  if (!target) return;
+  if (!hasReceivedFirstToken) return;
 
   const now = Date.now();
-  // Throttle full Markdown re-parse to every 80ms to avoid DOM rebuild stutter
-  // Allows SSE chunks to batch up naturally before triggering expensive parse+sanitize
-  if (!isStreamingActive || (now - lastScreenRenderTime >= 80)) {
+  // Fluid frame-synchronized render throttle (24ms ~ 45-60 FPS) for buttery smooth streaming
+  if (!isStreamingActive || (now - lastScreenRenderTime >= 24)) {
     lastScreenRenderTime = now;
   } else {
-    // Schedule another render for when throttle window expires
+    // Schedule next frame within fluid window
     if (!screenStreamRenderRaf) {
       screenStreamRenderRaf = setTimeout(() => {
         screenStreamRenderRaf = null;
         renderStreamingContent();
-      }, 80 - (now - lastScreenRenderTime));
+      }, Math.max(1, 24 - (now - lastScreenRenderTime)));
     }
     return;
   }
+
+  updateCategoryTabsProgress();
 
   let textRaw = getCategoryContent(activeCategory, currentAnalysisResult);
 
   let html = '';
   if (textRaw) {
-    if (typeof marked !== 'undefined') {
+    const trimmed = textRaw.trim();
+    if (trimmed.startsWith('<div') || trimmed.startsWith('<span') || trimmed.startsWith('<svg')) {
+      html = trimmed;
+    } else if (typeof marked !== 'undefined') {
       html = marked.parse(textRaw);
     } else {
       html = textRaw;
@@ -1179,8 +1752,9 @@ function renderStreamingContent() {
     if (activeCategory === 'ocr') {
       html = `<div class="ocr-rendered-container">${html}</div>`;
     }
-    // Add blinking cursor during active streaming for smooth visual feedback
-    if (isStreamingActive) {
+    // Add pulsing animated cursor ONLY during active streaming AND when active category is not yet finished
+    const isCatDone = isCategoryFinished(activeCategory, accumulatedStreamText, !isStreamingActive);
+    if (isStreamingActive && !isCatDone) {
       html += '<span class="stream-blink-cursor"></span>';
     }
   } else if (isStreamingActive) {
@@ -1199,13 +1773,99 @@ function renderStreamingContent() {
   lastScreenRenderedHtml = html;
 
   target.innerHTML = html;
-  chatThread.scrollTop = chatThread.scrollHeight;
+  if (typeof renderMathInElement !== 'undefined') {
+    try {
+      renderMathInElement(target, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false }
+        ],
+        throwOnError: false
+      });
+    } catch (e) {}
+  }
+  // Formats clean headers: ### คำตอบหลัก and ### สรุปประเด็นสำคัญ
+
+  // Smooth fluid auto-scroll following live generation
+  if (chatThread) {
+    const scrollDiff = chatThread.scrollHeight - chatThread.scrollTop - chatThread.clientHeight;
+    if (scrollDiff < 140) {
+      chatThread.scrollTo({
+        top: chatThread.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }
 }
 
-// --- SCREEN CAPTURE & REAL-TIME GEMINI STREAMING PROCESSOR ---
+// === [NEW SCREEN AREA SELECTION: FLOATING TOOLBAR INTEGRATION] ===
 async function processScreenCapture(cropBox) {
   try {
     lastCroppedBox = cropBox;
+
+    // 1. Immediately terminate snipping canvas & overlay states
+    document.body.classList.remove('snipping-active');
+    stopLaserScan();
+    stopSpeechSynthesis();
+    if (percentBadge) percentBadge.style.display = 'none';
+    if (canvas) {
+      canvas.style.display = 'none';
+      canvas.style.backgroundImage = 'none';
+    }
+    if (topHint) topHint.style.display = 'none';
+    isSnippingActive = false;
+
+    // 2. Ensure legacy multi-tab AI response window stays strictly hidden
+    const legacyAiWin = document.getElementById('aiWindow');
+    if (legacyAiWin) {
+      legacyAiWin.style.display = 'none';
+      legacyAiWin.style.visibility = 'hidden';
+      legacyAiWin.style.opacity = '0';
+    }
+
+    // 3. Delegate to Main Process for fast GDI RAM crop + Smart Floating Toolbar Presentation
+    if (window.electronAPI && window.electronAPI.screenAreaSelected) {
+      window.electronAPI.screenAreaSelected(cropBox);
+    }
+  } catch (err) {
+    console.error('Error in new screen area selection:', err);
+    cancelSnippingUI(true);
+  }
+}
+
+/*
+// ==============================================================================
+// === [LEGACY SCREEN STREAM ANSWER WINDOW - COMMENTED OUT PER USER REQUEST] ===
+// ==============================================================================
+// Previous architecture: stream all 5 tabs (Answer, Explain, Summary, Translate, OCR) 
+// into #aiWindow simultaneously. Kept as commented legacy code below:
+async function legacyProcessScreenCapture(cropBox) {
+  try {
+    lastCroppedBox = cropBox;
+
+    // 0. Pre-Check: Ensure API Key is configured before opening AI window
+    const currentApiKey = (appSettings && appSettings.apiKey ? appSettings.apiKey.trim() : '');
+    if (!currentApiKey) {
+      if (isSnippingActive) cancelSnippingUI(true);
+      if (canvas) canvas.style.display = 'none';
+      if (topHint) topHint.style.display = 'none';
+      if (percentBadge) percentBadge.style.display = 'none';
+      stopLaserScan();
+
+      // Guard: Ensure AI answer window NEVER displays
+      if (aiWindow) {
+        aiWindow.style.display = 'none';
+        aiWindow.style.visibility = 'hidden';
+        aiWindow.style.opacity = '0';
+      }
+      if (window.electronAPI) {
+        window.electronAPI.setIgnoreMouseEvents(false);
+      }
+
+      openSettingsModal();
+      alert("กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
+      return;
+    }
 
     // 1. Instant 0ms transition: hide snipping canvas, reveal AI window with skeleton
     document.body.classList.remove('snipping-active');
@@ -1281,6 +1941,7 @@ async function processScreenCapture(cropBox) {
     // 3. Reveal AI window with clean skeleton already loaded in 0ms
     showAiWindowPosition(cropBox);
 
+    // Cleanly stop laser scan and hide canvas simultaneously
     const streamStartTime = performance.now();
     let hasAnswerCompleted = false;
 
@@ -1318,7 +1979,6 @@ async function processScreenCapture(cropBox) {
           thinkingAccordion.style.display = 'block';
         }
 
-        // Deliver answer latency and actions immediately as soon as [ANSWER] section is complete or next section begins!
         const hasReachedNextSection = accumulatedStreamText.search(/###?\s*\[?(?:EXPLAIN|EXPLANATION|คำอธิบาย|SUMMARY|สรุป|TRANSLATE|แปล|OCR|TEXT|ถอดข้อความ)\]?/i) !== -1;
 
         if (!hasAnswerCompleted && (hasReachedNextSection || (currentAnalysisResult.answer && currentAnalysisResult.answer.length > 20 && (currentAnalysisResult.explain || currentAnalysisResult.summary || currentAnalysisResult.translate)))) {
@@ -1332,7 +1992,6 @@ async function processScreenCapture(cropBox) {
           if (actionsEl) actionsEl.style.display = 'flex';
         }
 
-        // Smooth live progressive rendering of the active category
         scheduleScreenStreamRender();
       }
     });
@@ -1350,25 +2009,23 @@ async function processScreenCapture(cropBox) {
       if (data.ocrText && (!currentAnalysisResult.ocr || currentAnalysisResult.ocr.length < data.ocrText.length)) {
         currentAnalysisResult.ocr = data.ocrText;
       }
-      // Ensure all 5 categories have robust content simultaneously!
-      if (!currentAnalysisResult.explain) {
-        currentAnalysisResult.explain = currentAnalysisResult.answer;
-      }
-      if (!currentAnalysisResult.summary) {
+      if (!currentAnalysisResult.summary && currentAnalysisResult.answer) {
         currentAnalysisResult.summary = createQuickBulletSummary(currentAnalysisResult.answer);
       }
-      if (!currentAnalysisResult.translate && currentAnalysisResult.ocr) {
-        currentAnalysisResult.translate = currentAnalysisResult.answer;
+      const hasThaiInTr = currentAnalysisResult.translate && /[\u0E00-\u0E7F]/.test(currentAnalysisResult.translate);
+      const foreignSource = (currentAnalysisResult.ocr || currentAnalysisResult.answer || '').trim();
+      if (!hasThaiInTr && /[A-Za-z]/.test(foreignSource) && foreignSource.length > 5) {
+        currentAnalysisResult.translate = '';
+        triggerAutoTranslation(foreignSource);
       }
       currentDisplayModelName = selectedModelNameText();
 
-      // Render full conversation view with LaTeX math and copy buttons - simultaneously for all categories!
+      const hasAllCategories = Boolean(currentAnalysisResult.answer && (currentAnalysisResult.explain || currentAnalysisResult.summary));
       renderConversationView();
 
       const actionsEl = document.getElementById('liveStreamingActions');
       if (actionsEl) actionsEl.style.display = 'flex';
 
-      // Save to history
       window.electronAPI.saveHistoryItem({
         id: Date.now(),
         model: currentDisplayModelName || selectedModelNameText(),
@@ -1392,16 +2049,21 @@ async function processScreenCapture(cropBox) {
       window.electronAPI.removeStreamListeners();
     });
 
-    // 5. Concurrently crop and trigger streaming API in main process without blocking UI
-    const croppedDataUrl = await window.electronAPI.cropArea(cropBox);
-    currentCroppedBase64 = croppedDataUrl;
-
-    if (!croppedDataUrl) {
-      throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
-    }
-
+    // 5. Zero-Bounce Unified Screen Streaming Pipeline
     const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
-    await window.electronAPI.analyzeScreenStream(croppedDataUrl, selectedModel);
+    if (window.electronAPI && window.electronAPI.cropAndAnalyzeScreenStream) {
+      const res = await window.electronAPI.cropAndAnalyzeScreenStream({ rect: cropBox, modelId: selectedModel });
+      if (res && res.croppedDataUrl) {
+        currentCroppedBase64 = res.croppedDataUrl;
+      }
+    } else {
+      const croppedDataUrl = await window.electronAPI.cropArea(cropBox);
+      currentCroppedBase64 = croppedDataUrl;
+      if (!croppedDataUrl) {
+        throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
+      }
+      await window.electronAPI.analyzeScreenStream(croppedDataUrl, selectedModel);
+    }
 
   } catch (err) {
     console.error('Streaming error:', err);
@@ -1421,16 +2083,27 @@ async function processScreenCapture(cropBox) {
     }
 
     if (err.message && (err.message.includes('API Key') || err.code === 'API_KEY_REQUIRED')) {
-      alert("กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
+      if (aiWindow) {
+        aiWindow.style.display = 'none';
+        aiWindow.style.visibility = 'hidden';
+        aiWindow.style.opacity = '0';
+      }
+      if (window.electronAPI) {
+        window.electronAPI.setIgnoreMouseEvents(false);
+      }
       openSettingsModal();
+      alert("กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
       return;
     }
 
     setTimeout(() => {
-      alert(`เกิดข้อผิดพลาด: ${err.message}`);
+      const cleanMsg = (err.message || '').replace(new RegExp("^Error invoking remote method '[^']+':\\\\s*", "i"), '');
+      alert(`เกิดข้อผิดพลาด: ${cleanMsg}`);
     }, 50);
   }
 }
+// ==============================================================================
+*/
 
 // --- POSITION AI ANSWER WINDOW IN THE CENTER OF SCREEN ---
 function showAiWindowPosition(cropBox) {
@@ -1485,8 +2158,6 @@ function renderConversationView() {
   chatThread.scrollTop = chatThread.scrollHeight;
 }
 
-let isTranslatingOcr = false;
-
 // --- SWITCH TAB & RENDER MARKDOWN + LATEX MATH ---
 function switchCategory(cat, btnEl) {
   stopSpeechSynthesis();
@@ -1495,29 +2166,29 @@ function switchCategory(cat, btnEl) {
   buttons.forEach(btn => btn.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
 
-  // If user switches to 'translate' tab and translation is not yet available,
-  // automatically translate the scanned OCR text into Thai on-the-fly!
-  if (cat === 'translate' && (!currentAnalysisResult.translate || !currentAnalysisResult.translate.trim()) && !isTranslatingOcr && !isStreamingActive) {
-    const sourceText = (currentAnalysisResult.ocr || '').trim();
-    if (sourceText && sourceText !== '(ไม่มีข้อความในภาพ)' && !sourceText.includes('ไม่พบข้อความตัวอักษร')) {
-      isTranslatingOcr = true;
-      renderConversationView();
-      if (window.electronAPI && window.electronAPI.quickTextAsk) {
-        window.electronAPI.quickTextAsk({
-          promptText: `คุณคือนักแปลภาษาระดับมืออาชีพ จงแปลข้อความต่อไปนี้เป็นภาษาไทยโดยตรงเท่านั้น แปลตรงตัวตามต้นฉบับประโยคต่อประโยค ย่อหน้าต่อย่อหน้า ครบถ้วนทุกประโยค แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำเด็ดขาด ห้ามแต่งเติมหัวข้อใหม่ พร้อมรักษารูปแบบและองค์ประกอบ (Layout & Spatial Composition) ให้ตรงตามต้นฉบับ เช่น การขึ้นบรรทัดใหม่ การเว้นวรรค หัวข้อ รายการข้อ (Bullet points) และตาราง Markdown เพื่อให้อ่านง่าย สบายตา ห้ามสรุป ห้ามอธิบาย และห้ามตัดทอนข้อความใดๆ (หากต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษ):\n\n${sourceText}`
-        }).then(res => {
-          if (res && res.fullText) {
-            currentAnalysisResult.translate = res.fullText.trim();
-          }
-        }).catch(err => {
-          console.warn('Auto translation error:', err);
-        }).finally(() => {
-          isTranslatingOcr = false;
-          if (activeCategory === 'translate') {
-            renderConversationView();
-          }
-        });
-      }
+  // If user switches to 'translate' tab and translation is not yet available or not Thai,
+  // automatically translate the foreign text into Thai on-the-fly!
+  if (cat === 'translate') {
+    const hasThai = currentAnalysisResult && currentAnalysisResult.translate && /[\u0E00-\u0E7F]/.test(currentAnalysisResult.translate);
+    const sourceText = currentAnalysisResult ? (currentAnalysisResult.ocr || currentAnalysisResult.answer || '').trim() : '';
+    if (!hasThai && /[A-Za-z]/.test(sourceText) && sourceText.length > 5 && !isTranslatingOcr && !isStreamingActive) {
+      triggerAutoTranslation(sourceText);
+    }
+  }
+
+  // On-demand lazy load for OCR when user clicks OCR tab
+  if (cat === 'ocr') {
+    const hasOcr = currentAnalysisResult && currentAnalysisResult.ocr && currentAnalysisResult.ocr.length > 5;
+    if (!hasOcr && !isFetchingOcr && !isStreamingActive && currentCroppedBase64) {
+      triggerAutoOcr();
+    }
+  }
+
+  // On-demand lazy load for Explain when user clicks Explain tab
+  if (cat === 'explain') {
+    const hasExp = currentAnalysisResult && currentAnalysisResult.explain && currentAnalysisResult.explain.length > 5 && currentAnalysisResult.explain !== currentAnalysisResult.answer;
+    if (!hasExp && !isFetchingExplain && !isStreamingActive && currentCroppedBase64) {
+      triggerAutoExplain();
     }
   }
 
@@ -1637,8 +2308,11 @@ function appendAiBubble(tagTitle, rawMarkdownText, shouldScroll = true, toolsDat
   const contentEl = document.getElementById(bubbleId);
 
   // Render Markdown with DOMPurify XSS Sanitization & KaTeX Math
-  let parsedHtml = rawMarkdownText;
-  if (typeof marked !== 'undefined') {
+  let parsedHtml = rawMarkdownText || '';
+  const trimmed = parsedHtml.trim();
+  if (trimmed.startsWith('<div') || trimmed.startsWith('<span') || trimmed.startsWith('<svg')) {
+    parsedHtml = trimmed;
+  } else if (typeof marked !== 'undefined') {
     parsedHtml = marked.parse(rawMarkdownText);
   }
   if (typeof DOMPurify !== 'undefined') {
@@ -1681,7 +2355,11 @@ async function selectAiModel(val, name, el, e) {
   currentSelectedModel = val;
   appSettings.defaultModel = val;
   if (window.electronAPI) {
-    await window.electronAPI.saveSettings(appSettings);
+    if (window.electronAPI.setActiveModel) {
+      await window.electronAPI.setActiveModel(val);
+    } else {
+      await window.electronAPI.saveSettings(appSettings);
+    }
   }
 
   const options = document.querySelectorAll('.model-option');
@@ -1694,6 +2372,7 @@ async function selectAiModel(val, name, el, e) {
   const dropdown = document.getElementById('modelDropdown');
   if (dropdown) dropdown.classList.remove('open');
 
+  updateCustomModelDropdownUI(val);
   triggerAutoRefreshIfActive();
 }
 
@@ -1905,6 +2584,18 @@ async function sendUserMessage() {
   const query = chatInput.value.trim();
   if (!query) return;
 
+  const currentApiKey = (appSettings && appSettings.apiKey ? appSettings.apiKey.trim() : '');
+  if (!currentApiKey) {
+    if (aiWindow) {
+      aiWindow.style.display = 'none';
+      aiWindow.style.visibility = 'hidden';
+      aiWindow.style.opacity = '0';
+    }
+    openSettingsModal();
+    alert("กรุณาระบุ Google AI Studio Gemini API Key ในเมนูการตั้งค่า");
+    return;
+  }
+
   followUpChatMessages.push({ role: 'user', text: query });
   appendUserBubble(query);
   chatInput.value = '';
@@ -1934,7 +2625,8 @@ async function sendUserMessage() {
       window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
     }
     setTimeout(() => {
-      alert(`เกิดข้อผิดพลาด: ${err.message}`);
+      const cleanMsg = (err.message || '').replace(/^Error invoking remote method '[^']+':\s*/i, '');
+      alert(`เกิดข้อผิดพลาด: ${cleanMsg}`);
       if (window.electronAPI) {
         window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
       }
@@ -2043,14 +2735,61 @@ function openSettingsModal() {
   if (isSnippingActive) cancelSnippingUI(true);
   if (canvas) canvas.style.display = 'none';
   if (topHint) topHint.style.display = 'none';
+  document.body.classList.remove('snipping-active');
   if (percentBadge) percentBadge.style.display = 'none';
-  if (window.electronAPI) window.electronAPI.setIgnoreMouseEvents(false);
+  // Ensure AI answer window NEVER displays behind settings modal
+  if (aiWindow) {
+    aiWindow.style.display = 'none';
+    aiWindow.style.visibility = 'hidden';
+    aiWindow.style.opacity = '0';
+  }
+  if (window.electronAPI) {
+    window.electronAPI.setIgnoreMouseEvents(false);
+    if (window.electronAPI.showWindow) window.electronAPI.showWindow();
+  }
   const modal = document.getElementById('settingsModal');
   const apiKeyInput = document.getElementById('apiKeyInput');
   const shortcutInput = document.getElementById('shortcutInput');
   const quickShortcutInput = document.getElementById('quickTextShortcutInput');
 
-  if (apiKeyInput) apiKeyInput.value = appSettings.apiKey || '';
+  if (apiKeyInput) {
+    apiKeyInput.value = appSettings.apiKey || '';
+    apiKeyInput.type = 'password';
+
+    const warningEl = document.getElementById('apiKeyWarningMsg');
+    const updateKeyWarning = () => {
+      const val = apiKeyInput.value.trim();
+      if (val && /[^\x20-\x7E]/.test(val)) {
+        if (warningEl) {
+          warningEl.style.display = 'block';
+          warningEl.innerText = '[!] ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ ซึ่งไม่ใช่ Google AI Studio API Key (API Key ที่ถูกต้องจะขึ้นต้นด้วย AIza...)';
+        }
+      } else {
+        if (warningEl) warningEl.style.display = 'none';
+      }
+    };
+    apiKeyInput.oninput = updateKeyWarning;
+    updateKeyWarning();
+  }
+
+  const toggleBtn = document.getElementById('toggleApiKeyVisibility');
+  if (toggleBtn && apiKeyInput) {
+    const eyeOpen = document.getElementById('eyeIconOpen');
+    const eyeClosed = document.getElementById('eyeIconClosed');
+    toggleBtn.onclick = (e) => {
+      e.preventDefault();
+      if (apiKeyInput.type === 'password') {
+        apiKeyInput.type = 'text';
+        if (eyeOpen) eyeOpen.style.display = 'none';
+        if (eyeClosed) eyeClosed.style.display = 'block';
+      } else {
+        apiKeyInput.type = 'password';
+        if (eyeOpen) eyeOpen.style.display = 'block';
+        if (eyeClosed) eyeClosed.style.display = 'none';
+      }
+    };
+  }
+
   if (shortcutInput) shortcutInput.value = appSettings.shortcutKey || 'Alt+Shift+S';
   if (quickShortcutInput) quickShortcutInput.value = appSettings.quickTextShortcutKey || 'Ctrl+CapsLock';
 
@@ -2104,7 +2843,8 @@ function renderThinkingModelSettings() {
     'gemini-3.1-pro-preview': true
   };
 
-  AI_MODELS.forEach(model => {
+  const coreModels = AI_MODELS.filter(m => ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'].includes(m.id));
+  coreModels.forEach(model => {
     const isEnabled = currentThinking[model.id] !== undefined
       ? Boolean(currentThinking[model.id])
       : Boolean(model.defaultThinking);
@@ -2205,8 +2945,15 @@ async function saveSettingsFromModal() {
   const chkAutoLaunch = document.getElementById('autoLaunchCheckbox');
   const autoLaunchVal = chkAutoLaunch ? chkAutoLaunch.checked : Boolean(appSettings.autoLaunch);
 
+  const rawApiKey = apiKeyInput ? apiKeyInput.value.trim() : (appSettings.apiKey || '');
+  if (rawApiKey && /[^\x20-\x7E]/.test(rawApiKey)) {
+    alert('API Key ไม่ถูกต้อง: ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ\n\nGoogle AI Studio API Key ต้องเป็นภาษาอังกฤษและตัวเลข (เช่น AIza...)\nกรุณาตรวจสอบและคัดลอกใหม่จาก https://aistudio.google.com');
+    if (apiKeyInput) apiKeyInput.focus();
+    return;
+  }
+
   const newSettings = {
-    apiKey: apiKeyInput ? apiKeyInput.value.trim() : appSettings.apiKey,
+    apiKey: rawApiKey,
     shortcutKey: shortcutVal,
     quickTextShortcutKey: quickShortcutVal,
     autoLaunch: autoLaunchVal,
@@ -2233,8 +2980,17 @@ async function openHistoryModal() {
   if (isSnippingActive) cancelSnippingUI(true);
   if (canvas) canvas.style.display = 'none';
   if (topHint) topHint.style.display = 'none';
+  document.body.classList.remove('snipping-active');
   if (percentBadge) percentBadge.style.display = 'none';
-  if (window.electronAPI) window.electronAPI.setIgnoreMouseEvents(false);
+  if (aiWindow) {
+    aiWindow.style.display = 'none';
+    aiWindow.style.visibility = 'hidden';
+    aiWindow.style.opacity = '0';
+  }
+  if (window.electronAPI) {
+    window.electronAPI.setIgnoreMouseEvents(false);
+    if (window.electronAPI.showWindow) window.electronAPI.showWindow();
+  }
   const modal = document.getElementById('historyModal');
   const historyList = document.getElementById('historyList');
   if (!historyList) return;
@@ -2477,6 +3233,22 @@ function setupQuickTextKeyboardListener() {
 
     if (e.key === 'Escape') {
       e.preventDefault();
+      const customBox = document.getElementById('quickCustomBox');
+      if (customBox && customBox.style.display === 'flex') {
+        customBox.style.display = 'none';
+        if (isSnippingActive && box && box.w >= 10) {
+          updateSmartScreenToolbarPosition(box);
+        }
+        return;
+      }
+      const answerCard = document.getElementById('quickAnswerCard');
+      if (answerCard && answerCard.style.display === 'flex') {
+        answerCard.style.display = 'none';
+        if (isSnippingActive && box && box.w >= 10) {
+          updateSmartScreenToolbarPosition(box);
+        }
+        return;
+      }
       closeQuickTextUI();
       return;
     }
@@ -2486,7 +3258,17 @@ function setupQuickTextKeyboardListener() {
       if (e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const digitIndex = parseInt(e.key, 10) - 1;
-        executeQuickPromptByIndex(digitIndex);
+        if (isSnippingActive) {
+          executeScreenPromptByIndex(digitIndex);
+        } else {
+          executeQuickPromptByIndex(digitIndex);
+        }
+        return;
+      }
+      if (e.key === '?' || e.key === '/') {
+        e.preventDefault();
+        toggleQuickCustomInput();
+        return;
       }
     }
   });
@@ -2498,6 +3280,7 @@ function setupQuickTextKeyboardListener() {
     const promptModal = document.getElementById('promptEditorModal');
     if (quickCont && quickCont.style.display === 'flex') {
       if (!quickCont.contains(e.target) && (!promptModal || !promptModal.contains(e.target))) {
+        if (isSnippingActive) return; // Never dismiss via double-click while interacting with screen snip selection
         const now = Date.now();
         const elapsed = now - lastInWinOutsideClickTime;
         if (elapsed >= 100 && elapsed <= 600) {
@@ -2545,10 +3328,22 @@ function renderQuickActionsToolbar() {
       <span class="quick-action-label">${prompt.name}</span>
     `;
 
-    btn.onclick = (e) => {
-      e.stopPropagation();
+    let lastTriggerTime = 0;
+    const triggerPrompt = (e) => {
+      if (Date.now() - lastTriggerTime < 300) return;
+      lastTriggerTime = Date.now();
+      if (e) {
+        try { e.stopPropagation(); } catch (err) {}
+      }
       executeQuickPrompt(prompt.id);
     };
+
+    btn.addEventListener('click', triggerPrompt);
+    btn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerPrompt(e);
+      }
+    });
 
     actionsList.appendChild(btn);
   });
@@ -2563,7 +3358,9 @@ function handleCloseQuickTextUI() {
 
 function closeQuickTextUI() {
   handleCloseQuickTextUI();
-  if (window.electronAPI) {
+  if (isSnippingActive) {
+    cancelSnippingUI(false);
+  } else if (window.electronAPI) {
     window.electronAPI.closeQuickText();
   }
 }
@@ -2628,13 +3425,43 @@ async function executeQuickPrompt(promptId) {
     finalPrompt = `${template}\n\n${textToUse}`;
   }
 
+  lastQuickPromptExecutionParams = {
+    promptId: prompt.id,
+    actionName: prompt.name,
+    promptText: finalPrompt
+  };
+
   showQuickAnswerState(prompt.name);
 
   try {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
       promptText: finalPrompt,
-      modelId: currentSelectedModel
+      modelId: currentSelectedModel || 'gemini-3-flash-preview'
+    });
+
+    if (res && res.fullText) {
+      renderQuickAnswerContent(res.fullText);
+      const status = document.getElementById('quickAnswerStatus');
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+    }
+  } catch (err) {
+    handleQuickAnswerError({ error: err.message });
+  }
+}
+
+async function executeQuickPromptWithModel(promptId, modelId) {
+  const prompt = currentQuickPrompts.find(p => p.id === promptId);
+  const promptName = prompt ? prompt.name : (lastQuickPromptExecutionParams?.actionName || 'คำตอบ');
+  const finalPrompt = lastQuickPromptExecutionParams?.promptText || '';
+  if (!finalPrompt) return;
+
+  showQuickAnswerState(promptName);
+  try {
+    quickAnswerStreamText = '';
+    const res = await window.electronAPI.quickTextAsk({
+      promptText: finalPrompt,
+      modelId: modelId || currentSelectedModel || 'gemini-3-flash-preview'
     });
 
     if (res && res.fullText) {
@@ -2655,6 +3482,7 @@ function executeQuickPromptByIndex(index) {
 }
 
 function showQuickAnswerState(actionName) {
+  stopQuickSpeak();
   const answerCard = document.getElementById('quickAnswerCard');
   const actionBadge = document.getElementById('quickAnswerActionBadge');
   const status = document.getElementById('quickAnswerStatus');
@@ -2671,11 +3499,35 @@ function showQuickAnswerState(actionName) {
       </div>
     `;
   }
-  if (answerCard) answerCard.style.display = 'flex';
+  if (answerCard) {
+    answerCard.style.display = 'flex';
+    if (typeof getSmartScreenToolbarWidth === 'function') {
+      const tbWidth = getSmartScreenToolbarWidth();
+      answerCard.style.width = '100%';
+      answerCard.style.maxWidth = '100%';
+      const container = document.getElementById('quickTextContainer');
+      if (container) {
+        container.style.width = `${tbWidth}px`;
+        container.style.maxWidth = `${tbWidth}px`;
+      }
+    }
+  }
+  if (typeof updateCustomModelDropdownUI === 'function' && currentSelectedModel) {
+    updateCustomModelDropdownUI(currentSelectedModel);
+  } else {
+    const modelSel = document.getElementById('quickModelSelect');
+    if (modelSel && currentSelectedModel) {
+      modelSel.value = currentSelectedModel;
+    }
+  }
 }
 
 function handleQuickAnswerChunk(data) {
   if (!data || !data.chunk) return;
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard && answerCard.style.display !== 'flex') {
+    answerCard.style.display = 'flex';
+  }
   quickAnswerStreamText += data.chunk;
   renderQuickAnswerContent(quickAnswerStreamText);
 }
@@ -2691,11 +3543,42 @@ function handleQuickAnswerFinish(data) {
 }
 
 function handleQuickAnswerError(data) {
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'flex';
+  }
   const body = document.getElementById('quickAnswerBody');
   const status = document.getElementById('quickAnswerStatus');
   if (status) status.innerText = 'เกิดข้อผิดพลาด';
   if (body) {
-    body.innerHTML = `<div style="color:#ef4444; font-size:0.82rem; padding:6px 0;">${data?.error || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'}</div>`;
+    const rawErr = data?.error || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ';
+    const isApiKeyError = rawErr.includes('API Key') || rawErr.includes('API key') || rawErr.includes('API_KEY');
+    if (isApiKeyError) {
+      body.innerHTML = `
+        <div style="color:#ef4444; font-size:0.84rem; padding:8px 0; line-height:1.5;">
+          <div style="font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>ปัญหาเกี่ยวกับ Google AI Studio API Key</span>
+          </div>
+          <div>${rawErr}</div>
+          <div style="margin-top:10px;">
+            <button id="quickAnswerOpenSettingsBtn" style="background:#0284c7; color:#fff; border:none; padding:6px 14px; font-size:0.8rem; border-radius:6px; cursor:pointer; font-weight:600; box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+              เปิดหน้าการตั้งค่า (Settings)
+            </button>
+          </div>
+        </div>
+      `;
+      const btn = document.getElementById('quickAnswerOpenSettingsBtn');
+      if (btn) {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openSettingsModal();
+        };
+      }
+    } else {
+      body.innerHTML = `<div style="color:#ef4444; font-size:0.82rem; padding:6px 0;">${rawErr}</div>`;
+    }
   }
 }
 
@@ -2703,15 +3586,20 @@ function renderQuickAnswerContent(text) {
   const body = document.getElementById('quickAnswerBody');
   if (!body) return;
 
-  if (typeof marked !== 'undefined') {
-    let html = marked.parse(text || '');
-    if (typeof DOMPurify !== 'undefined') {
-      html = DOMPurify.sanitize(html);
-    }
-    body.innerHTML = html;
+  const raw = text || '';
+  const trimmed = raw.trim();
+  let html = '';
+  if (trimmed.startsWith('<div') || trimmed.startsWith('<span') || trimmed.startsWith('<svg')) {
+    html = trimmed;
+  } else if (typeof marked !== 'undefined') {
+    html = marked.parse(raw);
   } else {
-    body.innerText = text || '';
+    html = raw;
   }
+  if (typeof DOMPurify !== 'undefined') {
+    html = DOMPurify.sanitize(html);
+  }
+  body.innerHTML = html;
 
   // Auto-render KaTeX math formulas if present
   if (typeof renderMathInElement === 'function') {
@@ -2741,24 +3629,78 @@ function copyQuickAnswer() {
   });
 }
 
-function toggleQuickCustomInput() {
-  const box = document.getElementById('quickCustomBox');
+let screenSpeechActive = false;
+
+function stopQuickSpeak() {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  screenSpeechActive = false;
+  const label = document.getElementById('quickSpeakLabel');
+  const btn = document.getElementById('quickSpeakBtn');
+  if (label) label.innerText = 'อ่านเสียง';
+  if (btn) btn.classList.remove('speaking');
+}
+
+function toggleQuickSpeak() {
+  if (screenSpeechActive) {
+    stopQuickSpeak();
+    return;
+  }
+  const body = document.getElementById('quickAnswerBody');
+  if (!body) return;
+  const text = (body.innerText || '').trim();
+  if (!text) return;
+
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const hasThai = /[\u0E00-\u0E7F]/.test(text);
+  utterance.lang = hasThai ? 'th-TH' : 'en-US';
+  utterance.rate = 1.05;
+
+  const label = document.getElementById('quickSpeakLabel');
+  const btn = document.getElementById('quickSpeakBtn');
+  if (label) label.innerText = 'หยุดพูด';
+  if (btn) btn.classList.add('speaking');
+  screenSpeechActive = true;
+
+  utterance.onend = () => stopQuickSpeak();
+  utterance.onerror = () => stopQuickSpeak();
+  window.speechSynthesis.speak(utterance);
+}
+
+function toggleQuickCustomInput(forceState) {
+  const toolbar = document.getElementById('quickTextToolbar');
+  const actionsList = document.getElementById('quickActionsList');
+  const customToggleBtn = document.getElementById('quickCustomToggleBtn');
+  const cancelBtn = document.getElementById('quickCancelBtn');
+  const customBox = document.getElementById('quickCustomBox');
   const input = document.getElementById('quickCustomInput');
-  if (!box) return;
-  if (box.style.display === 'none' || !box.style.display) {
-    if (window.electronAPI && window.electronAPI.copyAndGetSelectedText) {
-      window.electronAPI.copyAndGetSelectedText().then(clip => {
-        if (clip) currentCapturedText = clip.trim();
-      }).catch(() => {});
-    } else if (!currentCapturedText && window.electronAPI && window.electronAPI.getClipboardText) {
-      window.electronAPI.getClipboardText().then(clip => {
-        if (clip) currentCapturedText = clip.trim();
-      }).catch(() => {});
+
+  const willOpen = (typeof forceState === 'boolean') 
+    ? forceState 
+    : (!customBox || customBox.style.display === 'none');
+
+  if (willOpen) {
+    if (actionsList) actionsList.style.display = 'none';
+    if (customToggleBtn) customToggleBtn.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (customBox) customBox.style.display = 'flex';
+    if (toolbar) toolbar.classList.add('custom-mode');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 50);
     }
-    box.style.display = 'flex';
-    if (input) setTimeout(() => input.focus(), 50);
   } else {
-    box.style.display = 'none';
+    if (customBox) customBox.style.display = 'none';
+    if (toolbar) toolbar.classList.remove('custom-mode');
+    if (actionsList) actionsList.style.display = 'flex';
+    if (customToggleBtn) customToggleBtn.style.display = 'inline-flex';
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+  }
+  if (box && box.w >= 10) {
+    updateSmartScreenToolbarPosition(box);
   }
 }
 
@@ -2766,6 +3708,10 @@ function handleQuickCustomKeyDown(event) {
   if (event.key === 'Enter') {
     event.preventDefault();
     submitQuickCustomAsk();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleQuickCustomInput(false);
   }
 }
 
@@ -2774,6 +3720,14 @@ async function submitQuickCustomAsk() {
   if (!input) return;
   const userCmd = input.value.trim();
   if (!userCmd) return;
+
+  input.value = '';
+  toggleQuickCustomInput(false);
+
+  if (isSnippingActive && box && box.w >= 10 && box.h >= 10) {
+    executeScreenPrompt('custom_ask', userCmd);
+    return;
+  }
 
   if (window.electronAPI && window.electronAPI.copyAndGetSelectedText) {
     try {
@@ -2797,10 +3751,6 @@ async function submitQuickCustomAsk() {
     finalPrompt = userCmd;
   }
 
-  input.value = '';
-  const box = document.getElementById('quickCustomBox');
-  if (box) box.style.display = 'none';
-
   showQuickAnswerState('คำถามของคุณ');
 
   try {
@@ -2818,6 +3768,654 @@ async function submitQuickCustomAsk() {
   } catch (err) {
     handleQuickAnswerError({ error: err.message });
   }
+}
+
+// === [SMART SCREEN VISION QUESTION TOOLBAR & ACTIONS] ===
+
+const SMART_SCREEN_PROMPTS = [
+  {
+    id: 'answer',
+    num: '1',
+    name: 'คำตอบ',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`,
+    title: 'ตอบคำถาม / แก้โจทย์ปัญหาในภาพ [1]',
+    prompt: 'ตอบคำถาม แก้โจทย์ หรือให้คำตอบที่ละเอียด ถูกต้อง ชัดเจน และตรงประเด็นที่สุดจากสิ่งที่ปรากฏในภาพนี้ (หากมีหลายหัวข้อหรือหลายประเด็นให้จัดเป็น bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย, หากเป็นข้อมูลดิบหรือคำตอบค่าเดียวให้แสดงตามโครงสร้างเดิม)'
+  },
+  {
+    id: 'explain',
+    num: '2',
+    name: 'อธิบาย',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    title: 'อธิบายรายละเอียด ความหมาย หรือขั้นตอน [2]',
+    prompt: 'อธิบายสิ่งที่ปรากฏในภาพนี้อย่างละเอียด ชัดเจน สละสลวย เข้าใจง่าย (หากมีหลายหัวข้อให้จัดเป็น bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย, หากเป็นข้อมูลดิบให้แสดงตามโครงสร้างเดิม)'
+  },
+  {
+    id: 'summarize',
+    num: '3',
+    name: 'สรุป',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></svg>`,
+    title: 'สรุปใจความสำคัญเป็นข้อๆ [3]',
+    prompt: 'สรุปประเด็นสำคัญของเนื้อหาหรือข้อความในภาพนี้เป็นข้อๆ ให้ครอบคลุม ชัดเจน และสละสลวย (ห้ามตอบคำถามหรือแก้ปัญหา)'
+  },
+  {
+    id: 'translate_th',
+    num: '4',
+    name: 'แปลภาษา',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    title: 'แปลข้อความในภาพเป็นภาษาไทย [4]',
+    prompt: 'แปลข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพนี้เป็นภาษาไทยตามต้นฉบับอย่างตรงไปตรงมาประโยคต่อประโยคเท่านั้น ห้ามแต่งเติม ห้ามขยายความ ห้ามอธิบายเพิ่มเติม ห้ามตอบคำถาม แสดงเฉพาะคำแปลภาษาไทยของข้อความที่เห็นในภาพเท่านั้น'
+  },
+  {
+    id: 'proofread',
+    num: '5',
+    name: 'ปรับปรุงการเขียน',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    title: 'ตรวจคำผิดและขัดเกลาไวยากรณ์ [5]',
+    prompt: 'ตรวจแก้คำผิดและขัดเกลาไวยากรณ์ของข้อความที่ปรากฏในภาพนี้ให้ถูกต้องสมบูรณ์และสละสลวย แสดงข้อความฉบับแก้ไขทันที และสรุปจุดแก้ไขสั้นๆ'
+  },
+  {
+    id: 'shorten',
+    num: '6',
+    name: 'ทำให้สั้นลง',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/></svg>`,
+    title: 'ย่อข้อความหรือเนื้อหาให้กระชับสั้นที่สุด [6]',
+    prompt: 'ย่อข้อความหรือเนื้อหาสำคัญที่ปรากฏในภาพนี้ให้กระชับและสั้นที่สุดโดยยังคงความหมายสำคัญครบถ้วน คงโครงสร้างเดิม (ห้ามตอบคำถาม)'
+  },
+  {
+    id: 'continue_writing',
+    num: '7',
+    name: 'เขียนต่อ',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+    title: 'เขียนขยายความเนื้อหาหรือประเด็นต่อ [7]',
+    prompt: '[ภารกิจ: เขียนขยายความเนื้อหาหรือประเด็นต่อจากข้อความที่ปรากฏในภาพนี้ โดยเขียนต่อยอดในมุมมองเดียวกัน ห้ามตอบคำถามเด็ดขาด ห้ามตอบรับ ห้ามพิมพ์ "คำตอบคือ" หรือ "ได้ครับ"]\n\nข้อความที่เขียนต่อขยายบริบท (เริ่มเขียนต่อทันที):'
+  },
+  {
+    id: 'define',
+    num: '8',
+    name: 'คือ',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    title: 'อธิบายว่าสิ่งนี้คืออะไร มีความหมายอย่างไร [8]',
+    prompt: 'อธิบายว่าคำศัพท์หรือหัวข้อเป้าหมายที่ปรากฏในภาพนี้คืออะไร มีความหมาย ความเป็นมา หรือหลักการทำงานอย่างไร อธิบายอย่างละเอียด ชัดเจน สละสลวย'
+  }
+];
+
+function renderSmartScreenActions() {
+  const actionsList = document.getElementById('quickActionsList');
+  if (!actionsList) return;
+  actionsList.innerHTML = '';
+
+  SMART_SCREEN_PROMPTS.forEach((prompt, index) => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-action-btn';
+    btn.setAttribute('type', 'button');
+    btn.setAttribute('draggable', 'false');
+    btn.setAttribute('onselectstart', 'return false;');
+    btn.style.animationDelay = `${index * 15}ms`;
+    btn.title = prompt.title || `กด [${index + 1}] หรือคลิกเพื่อ${prompt.name}`;
+
+    btn.innerHTML = `
+      <span class="quick-action-num">${prompt.num || (index + 1)}</span>
+      <span class="quick-action-label">${prompt.name}</span>
+    `;
+
+    let lastTriggerTime = 0;
+    const triggerAction = (e) => {
+      if (Date.now() - lastTriggerTime < 300) return;
+      lastTriggerTime = Date.now();
+      if (e) {
+        try { e.stopPropagation(); } catch (err) {}
+      }
+      executeScreenPrompt(prompt.id);
+    };
+
+    btn.addEventListener('click', triggerAction);
+    btn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerAction(e);
+      }
+    });
+
+    actionsList.appendChild(btn);
+  });
+}
+
+function getSmartScreenToolbarWidth() {
+  const toolbar = document.getElementById('quickTextToolbar');
+  if (!toolbar) return 875;
+  const prevW = toolbar.style.width;
+  toolbar.style.width = 'max-content';
+  const naturalW = Math.max(toolbar.scrollWidth || 0, toolbar.offsetWidth || 0, 875);
+  toolbar.style.width = prevW || '100%';
+  return naturalW;
+}
+
+function updateSmartScreenToolbarPosition(targetBox) {
+  const container = document.getElementById('quickTextContainer');
+  if (!container) return;
+
+  const toolbar = document.getElementById('quickTextToolbar');
+  const answerCard = document.getElementById('quickAnswerCard');
+  const isAnswerOpen = Boolean(answerCard && answerCard.style.display !== 'none' && window.getComputedStyle(answerCard).display !== 'none');
+
+  const tbWidth = getSmartScreenToolbarWidth();
+
+  // Lock container, toolbar, and answer card to the exact width of the options toolbar
+  container.style.width = `${tbWidth}px`;
+  container.style.maxWidth = `${tbWidth}px`;
+  if (toolbar) {
+    toolbar.style.width = '100%';
+    toolbar.style.maxWidth = '100%';
+  }
+  if (answerCard) {
+    answerCard.style.width = '100%';
+    answerCard.style.maxWidth = '100%';
+  }
+
+  // Base toolbar height for anchor calculation to keep toolbar position locked without jumping
+  const tbHeight = 48;
+
+  const winW = window.innerWidth;
+  const winH = window.innerHeight;
+
+  let posX = Math.round(targetBox.x + (targetBox.w - tbWidth) / 2);
+  posX = Math.max(12, Math.min(winW - tbWidth - 12, posX));
+
+  const GAP = 18;
+  const belowY = Math.round(targetBox.y + targetBox.h + GAP);
+  const aboveY = Math.round(targetBox.y - tbHeight - GAP);
+
+  let posY;
+  if (belowY + tbHeight <= winH - 12) {
+    posY = belowY;
+  } else if (aboveY >= 12) {
+    posY = aboveY;
+  } else {
+    posY = Math.max(12, Math.min(winH - tbHeight - 12, targetBox.y + targetBox.h - tbHeight - 24));
+  }
+
+  container.style.left = `${posX}px`;
+  container.style.top = `${posY}px`;
+
+  // Dynamically set max-height on answer card based on available screen space below posY
+  if (answerCard && isAnswerOpen) {
+    const availH = Math.max(140, winH - posY - tbHeight - 24);
+    answerCard.style.maxHeight = `${availH}px`;
+  }
+}
+
+function showSmartScreenToolbar(targetBox) {
+  const container = document.getElementById('quickTextContainer');
+  if (!container) return;
+
+  document.body.classList.add('toolbar-visible');
+  renderSmartScreenActions();
+
+  // Reset custom mode
+  const toolbar = document.getElementById('quickTextToolbar');
+  if (toolbar) toolbar.classList.remove('custom-mode');
+
+  const customBox = document.getElementById('quickCustomBox');
+  if (customBox) customBox.style.display = 'none';
+
+  const actionsList = document.getElementById('quickActionsList');
+  if (actionsList) actionsList.style.display = 'flex';
+
+  const customToggleBtn = document.getElementById('quickCustomToggleBtn');
+  if (customToggleBtn) customToggleBtn.style.display = 'inline-flex';
+
+  const cancelBtn = document.getElementById('quickCancelBtn');
+  if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+
+  container.style.display = 'flex';
+  container.style.opacity = '1';
+  container.style.pointerEvents = 'auto';
+
+  updateSmartScreenToolbarPosition(targetBox);
+  try {
+    window.focus();
+  } catch (err) {}
+  requestAnimationFrame(() => {
+    updateSmartScreenToolbarPosition(targetBox);
+  });
+}
+
+function hideSmartScreenToolbar(temporary = false) {
+  const container = document.getElementById('quickTextContainer');
+  if (!container) return;
+  if (temporary) {
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+  } else {
+    document.body.classList.remove('toolbar-visible');
+    container.style.display = 'none';
+    const answerCard = document.getElementById('quickAnswerCard');
+    if (answerCard) answerCard.style.display = 'none';
+    const customBox = document.getElementById('quickCustomBox');
+    if (customBox) customBox.style.display = 'none';
+    const toolbar = document.getElementById('quickTextToolbar');
+    if (toolbar) toolbar.classList.remove('custom-mode');
+    stopQuickSpeak();
+  }
+}
+
+function closeQuickAnswerCard() {
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) answerCard.style.display = 'none';
+  stopQuickSpeak();
+  if (isSnippingActive && box && box.w >= 10) {
+    updateSmartScreenToolbarPosition(box);
+  }
+}
+
+function executeScreenPromptByIndex(index) {
+  if (index >= 0 && index < SMART_SCREEN_PROMPTS.length) {
+    executeScreenPrompt(SMART_SCREEN_PROMPTS[index].id);
+  }
+}
+
+function getCanvasCroppedDataUrl(cropBox) {
+  if (!cropBox || cropBox.w <= 0 || cropBox.h <= 0) return null;
+  try {
+    const MAX_DIM = 768;
+    let targetW = Math.max(1, Math.round(cropBox.w));
+    let targetH = Math.max(1, Math.round(cropBox.h));
+    if (targetW > MAX_DIM || targetH > MAX_DIM) {
+      const scale = Math.min(MAX_DIM / targetW, MAX_DIM / targetH);
+      targetW = Math.max(1, Math.round(targetW * scale));
+      targetH = Math.max(1, Math.round(targetH * scale));
+    }
+
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = targetW;
+    offCanvas.height = targetH;
+    const offCtx = offCanvas.getContext('2d');
+    if (frozenScreenImage && frozenScreenImage.complete && frozenScreenImage.naturalWidth > 0) {
+      offCtx.drawImage(
+        frozenScreenImage,
+        cropBox.x, cropBox.y, cropBox.w, cropBox.h,
+        0, 0, targetW, targetH
+      );
+    } else {
+      offCtx.fillStyle = '#ffffff';
+      offCtx.fillRect(0, 0, targetW, targetH);
+    }
+    return offCanvas.toDataURL('image/jpeg', 0.78);
+  } catch (e) {
+    return null;
+  }
+}
+
+let lastScreenExecutionParams = null;
+let lastQuickPromptExecutionParams = null;
+
+const MODEL_DISPLAY_NAMES = {
+  'gemini-3.8-flash': 'Gemini 3.8 Flash',
+  'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+  'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
+  'gemini-3-flash-preview': 'Gemini 3 Flash'
+};
+
+function getCleanModelName(modelId) {
+  return MODEL_DISPLAY_NAMES[modelId] || modelId || 'AI';
+}
+
+function toggleCustomModelMenu(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const dropdown = document.getElementById('customModelDropdown');
+  const menu = document.getElementById('customModelMenu');
+  if (!dropdown || !menu) return;
+
+  const isOpen = dropdown.classList.contains('open');
+  if (isOpen) {
+    closeCustomModelMenu();
+  } else {
+    dropdown.classList.add('open');
+    menu.style.display = 'flex';
+  }
+}
+
+function closeCustomModelMenu() {
+  const dropdown = document.getElementById('customModelDropdown');
+  const menu = document.getElementById('customModelMenu');
+  if (dropdown) dropdown.classList.remove('open');
+  if (menu) menu.style.display = 'none';
+}
+
+function selectCustomModel(modelId, label) {
+  closeCustomModelMenu();
+  updateCustomModelDropdownUI(modelId, label);
+  handleQuickModelChange(modelId);
+}
+
+function updateCustomModelDropdownUI(modelId, label) {
+  const currentLabel = label || MODEL_DISPLAY_NAMES[modelId] || modelId;
+  const labelEl = document.getElementById('customModelCurrentLabel');
+  if (labelEl) labelEl.innerText = currentLabel;
+
+  // Sync active class on menu items
+  const items = document.querySelectorAll('#customModelMenu .custom-model-item');
+  items.forEach(item => {
+    if (item.getAttribute('data-model') === modelId) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+
+  // Sync hidden select element for backward-compat
+  const sel = document.getElementById('quickModelSelect');
+  if (sel && sel.value !== modelId) {
+    sel.value = modelId;
+  }
+}
+
+// Global click-outside listener to close menu
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('customModelDropdown');
+  if (dropdown && dropdown.classList.contains('open') && !dropdown.contains(e.target)) {
+    closeCustomModelMenu();
+  }
+});
+
+function handleQuickModelChange(newModelId) {
+  if (!newModelId) return;
+  currentSelectedModel = newModelId;
+  appSettings.defaultModel = newModelId;
+  if (typeof selectedModalModelId !== 'undefined') {
+    selectedModalModelId = newModelId;
+  }
+  updateCustomModelDropdownUI(newModelId);
+
+  // Universal synchronization across Tray, Settings, and Toolbars
+  if (window.electronAPI && window.electronAPI.setActiveModel) {
+    window.electronAPI.setActiveModel(newModelId);
+  } else if (window.electronAPI && window.electronAPI.saveConfig) {
+    window.electronAPI.saveConfig({ defaultModel: newModelId });
+  }
+
+  // If previous screen area execution exists, re-run with newly selected model immediately!
+  if (lastScreenExecutionParams) {
+    stopQuickSpeak();
+    const actionName = lastScreenExecutionParams.actionName || 'คำตอบ';
+    showQuickAnswerState(actionName);
+    const status = document.getElementById('quickAnswerStatus');
+    const modelName = getCleanModelName(newModelId);
+    if (status) status.innerText = `กำลังประมวลผลด้วย ${modelName}...`;
+
+    executeScreenPromptWithModel(
+      lastScreenExecutionParams.promptId,
+      lastScreenExecutionParams.customQuestion,
+      lastScreenExecutionParams.croppedBase64,
+      newModelId
+    );
+  } else if (lastQuickPromptExecutionParams) {
+    // If quick text ask was active in main window
+    stopQuickSpeak();
+    const actionName = lastQuickPromptExecutionParams.actionName || 'คำตอบ';
+    showQuickAnswerState(actionName);
+    const status = document.getElementById('quickAnswerStatus');
+    const modelName = getCleanModelName(newModelId);
+    if (status) status.innerText = `กำลังประมวลผลด้วย ${modelName}...`;
+
+    executeQuickPromptWithModel(lastQuickPromptExecutionParams.promptId, newModelId);
+  }
+}
+
+async function executeScreenPromptWithModel(promptId, customQuestion, croppedBase64, modelId) {
+  const promptDef = SMART_SCREEN_PROMPTS.find(p => p.id === promptId);
+  const actionName = customQuestion ? 'คำถามของคุณ' : (promptDef ? promptDef.name : 'วิเคราะห์');
+  const promptText = customQuestion || (promptDef ? promptDef.prompt : 'วิเคราะห์และตอบคำถามจากภาพนี้');
+  const modelToUse = modelId || currentSelectedModel || 'gemini-3-flash-preview';
+
+  lastScreenExecutionParams = {
+    promptId,
+    customQuestion,
+    croppedBase64,
+    actionName,
+    promptText
+  };
+
+  const modelSel = document.getElementById('quickModelSelect');
+  if (modelSel && modelSel.value !== modelToUse) {
+    modelSel.value = modelToUse;
+  }
+
+  try {
+    quickAnswerStreamText = '';
+    const res = await window.electronAPI.quickTextAsk({
+      promptText: promptText,
+      modelId: modelToUse,
+      promptId: promptId,
+      categoryName: promptId,
+      imageBase64: croppedBase64
+    });
+
+    if (res && res.fullText) {
+      renderQuickAnswerContent(res.fullText);
+      const status = document.getElementById('quickAnswerStatus');
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+    }
+  } catch (err) {
+    handleQuickAnswerError({ error: err.message });
+  }
+}
+
+async function executeScreenPrompt(promptId, customQuestion = null) {
+  if (!box || box.w < 10 || box.h < 10) return;
+
+  const promptDef = SMART_SCREEN_PROMPTS.find(p => p.id === promptId);
+  const actionName = customQuestion ? 'คำถามของคุณ' : (promptDef ? promptDef.name : 'วิเคราะห์');
+  const promptText = customQuestion || (promptDef ? promptDef.prompt : 'วิเคราะห์และตอบคำถามจากภาพนี้');
+  const modelToUse = currentSelectedModel || 'gemini-3-flash-preview';
+
+  const modelSel = document.getElementById('quickModelSelect');
+  if (modelSel && modelSel.value !== modelToUse) {
+    modelSel.value = modelToUse;
+  }
+
+  showQuickAnswerState(actionName);
+  updateSmartScreenToolbarPosition(box);
+
+  try {
+    let croppedBase64 = null;
+    if (window.electronAPI && window.electronAPI.cropArea) {
+      croppedBase64 = await window.electronAPI.cropArea(box);
+    }
+    if (!croppedBase64 && canvas) {
+      croppedBase64 = getCanvasCroppedDataUrl(box);
+    }
+
+    if (!croppedBase64) {
+      throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
+    }
+
+    lastCapturedScreenImage = croppedBase64;
+    lastCroppedBox = { ...box };
+
+    lastScreenExecutionParams = {
+      promptId,
+      customQuestion,
+      croppedBase64,
+      actionName,
+      promptText
+    };
+
+    quickAnswerStreamText = '';
+    const res = await window.electronAPI.quickTextAsk({
+      promptText: promptText,
+      modelId: modelToUse,
+      promptId: promptId,
+      categoryName: promptId,
+      imageBase64: croppedBase64
+    });
+
+    if (res && res.fullText) {
+      renderQuickAnswerContent(res.fullText);
+      const status = document.getElementById('quickAnswerStatus');
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+    }
+  } catch (err) {
+    handleQuickAnswerError({ error: err.message });
+  }
+}
+
+function setupToolbarDragHandle() {
+  const handle = document.querySelector('#quickTextToolbar .drag-handle');
+  const container = document.getElementById('quickTextContainer');
+  if (!handle || !container) return;
+  if (handle.dataset.dragInitialized === 'true') return;
+  handle.dataset.dragInitialized = 'true';
+
+  let isDraggingToolbar = false;
+  let startX = 0, startY = 0;
+  let initLeft = 0, initTop = 0;
+
+  const endDrag = (e) => {
+    if (!isDraggingToolbar) return;
+    isDraggingToolbar = false;
+    handle.classList.remove('dragging');
+    document.body.classList.remove('dragging-toolbar');
+    try {
+      if (e && typeof e.pointerId === 'number' && handle.hasPointerCapture && handle.hasPointerCapture(e.pointerId)) {
+        handle.releasePointerCapture(e.pointerId);
+      }
+    } catch (err) {}
+    window.removeEventListener('pointermove', onPointerMove, true);
+    window.removeEventListener('pointerup', endDrag, true);
+    window.removeEventListener('pointercancel', endDrag, true);
+    window.removeEventListener('mousemove', onMouseMoveLegacy, true);
+    window.removeEventListener('mouseup', endDrag, true);
+  };
+
+  const onPointerMove = (moveEv) => {
+    if (!isDraggingToolbar) return;
+    // Strict Left Button Hold Check: buttons must be 1 (primary button held down)
+    // If the button was released anywhere (even outside the window), stop dragging immediately!
+    if (moveEv.buttons !== 1) {
+      endDrag(moveEv);
+      return;
+    }
+    const dx = moveEv.clientX - startX;
+    const dy = moveEv.clientY - startY;
+    const maxLeft = Math.max(10, window.innerWidth - container.offsetWidth - 10);
+    const maxTop = Math.max(10, window.innerHeight - container.offsetHeight - 10);
+    container.style.left = `${Math.max(10, Math.min(maxLeft, initLeft + dx))}px`;
+    container.style.top = `${Math.max(10, Math.min(maxTop, initTop + dy))}px`;
+  };
+
+  const onMouseMoveLegacy = (moveEv) => {
+    if (!isDraggingToolbar) return;
+    if (moveEv.buttons !== 1) {
+      endDrag(moveEv);
+      return;
+    }
+    onPointerMove(moveEv);
+  };
+
+  const startDrag = (e) => {
+    // Strictly left-click only (button === 0)
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    isDraggingToolbar = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initLeft = parseInt(container.style.left, 10) || container.offsetLeft;
+    initTop = parseInt(container.style.top, 10) || container.offsetTop;
+
+    handle.classList.add('dragging');
+    document.body.classList.add('dragging-toolbar');
+
+    try {
+      if (typeof e.pointerId === 'number' && handle.setPointerCapture) {
+        handle.setPointerCapture(e.pointerId);
+      }
+    } catch (err) {}
+
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', endDrag, true);
+    window.addEventListener('pointercancel', endDrag, true);
+    window.addEventListener('mousemove', onMouseMoveLegacy, true);
+    window.addEventListener('mouseup', endDrag, true);
+  };
+
+  handle.addEventListener('pointerdown', startDrag);
+  handle.addEventListener('mousedown', startDrag);
+}
+
+function setupQuickTextContainerInteractions() {
+  const container = document.getElementById('quickTextContainer');
+  if (!container) return;
+  container.addEventListener('mousedown', (e) => e.stopPropagation());
+  container.addEventListener('mouseup', (e) => e.stopPropagation());
+  container.addEventListener('click', (e) => e.stopPropagation());
+  container.addEventListener('pointerdown', (e) => e.stopPropagation());
+  container.addEventListener('pointerup', (e) => e.stopPropagation());
+
+  const customToggleBtn = document.getElementById('quickCustomToggleBtn');
+  if (customToggleBtn) {
+    const triggerCustom = (e) => {
+      if (e) { try { e.stopPropagation(); } catch (err) {} }
+      toggleQuickCustomInput();
+    };
+    customToggleBtn.onclick = triggerCustom;
+    customToggleBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerCustom(e);
+      }
+    });
+  }
+
+  const backBtn = document.getElementById('quickBackBtn');
+  if (backBtn) {
+    const triggerBack = (e) => {
+      if (e) { try { e.stopPropagation(); } catch (err) {} }
+      toggleQuickCustomInput(false);
+    };
+    backBtn.onclick = triggerBack;
+    backBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerBack(e);
+      }
+    });
+  }
+
+  const cancelBtn = document.getElementById('quickCancelBtn');
+  if (cancelBtn) {
+    const triggerCancel = (e) => {
+      if (e) { try { e.stopPropagation(); } catch (err) {} }
+      closeQuickTextUI();
+    };
+    cancelBtn.onclick = triggerCancel;
+    cancelBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerCancel(e);
+      }
+    });
+  }
+
+  const sendBtn = document.getElementById('quickCustomSendBtn');
+  if (sendBtn) {
+    let lastSendTime = 0;
+    const triggerSend = (e) => {
+      if (Date.now() - lastSendTime < 300) return;
+      lastSendTime = Date.now();
+      if (e) { try { e.stopPropagation(); } catch (err) {} }
+      submitQuickCustomAsk();
+    };
+    sendBtn.addEventListener('click', triggerSend);
+    sendBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+        triggerSend(e);
+      }
+    });
+  }
+
+  setupToolbarDragHandle();
 }
 
 // --- CUSTOM PROMPTS MANAGEMENT IN SETTINGS ---
@@ -2906,6 +4504,12 @@ function updatePromptLivePreview() {
 }
 
 function openPromptEditorModal(promptId) {
+  document.body.classList.remove('snipping-active');
+  if (isSnippingActive) cancelSnippingUI(true);
+  if (window.electronAPI) {
+    window.electronAPI.setIgnoreMouseEvents(false);
+    if (window.electronAPI.showWindow) window.electronAPI.showWindow();
+  }
   const modal = document.getElementById('promptEditorModal');
   const title = document.getElementById('promptEditorTitle');
   const idInput = document.getElementById('editPromptId');
@@ -2962,7 +4566,7 @@ function openPromptEditorModal(promptId) {
 
   if (modal) {
     modal.style.display = 'flex';
-    modal.style.zIndex = '350';
+    modal.style.zIndex = '2147483645';
     modal.style.visibility = 'visible';
     modal.style.opacity = '1';
   }

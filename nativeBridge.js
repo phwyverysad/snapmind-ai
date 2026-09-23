@@ -43,6 +43,24 @@ try {
   electronClipboard = electron.clipboard || null;
 } catch (e) {}
 
+// === NATIVE SCREEN CAPTURE & SELECTION INTEGRATION (NativeScreenCapture.dll) ===
+let captureLib = null;
+let fnStartNativeScreenSelection = null;
+let fnNativeCaptureScreenFreezeJpeg = null;
+let fnNativeCropScreenRectToJpeg = null;
+let fnCancelNativeScreenCapture = null;
+let isCaptureLoaded = false;
+
+const CAPTURE_BUFFER_CAPACITY = 16 * 1024 * 1024; // 16MB RAM buffer for raw encoded JPEG (covers up to 8K displays)
+let sharedCaptureBuffer = null;
+let sharedJpegSize = null;
+let sharedWidth = null;
+let sharedHeight = null;
+let sharedX = null;
+let sharedY = null;
+let sharedW = null;
+let sharedH = null;
+
 function initNativeBridge() {
   if (isLoaded) return true;
 
@@ -146,13 +164,18 @@ function makeWindowTopmostNative(win, bounds = null) {
       if (isLoaded || initNativeBridge()) {
         if (fnMakeWindowTopmost) fnMakeWindowTopmost(hwnd);
       }
-      if (initGdiCapture() && fnSetWindowPos) {
-        if (bounds) {
-          // HWND_TOPMOST = -1, SWP_SHOWWINDOW = 0x0040
-          fnSetWindowPos(hwnd, -1, Math.round(bounds.x), Math.round(bounds.y), Math.round(bounds.width), Math.round(bounds.height), 0x0040);
-        } else {
-          // HWND_TOPMOST = -1, SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW = 0x0043
-          fnSetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0043);
+      if (initGdiCapture()) {
+        if (fnBringWindowToTop) {
+          try { fnBringWindowToTop(hwnd); } catch (topErr) {}
+        }
+        if (fnSetWindowPos) {
+          if (bounds && typeof bounds.width === 'number' && bounds.width > 0 && typeof bounds.height === 'number' && bounds.height > 0) {
+            // SWP_SHOWWINDOW (0x0040) - Enforce HWND_TOPMOST (-1) with full virtual screen dimensions covering taskbar
+            fnSetWindowPos(hwnd, -1, bounds.x || 0, bounds.y || 0, bounds.width, bounds.height, 0x0040);
+          } else {
+            // SWP_NOSIZE (0x0001) | SWP_NOMOVE (0x0002) | SWP_SHOWWINDOW (0x0040) = 0x0043
+            fnSetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0043);
+          }
         }
       }
     }
@@ -305,6 +328,7 @@ function stopHookPolling() {
 // === HIGH-SPEED WIN32 GDI SCREEN CAPTURE & CROPPING ===
 let user32Lib = null;
 let gdi32Lib = null;
+let kernel32Lib = null;
 let fnGetDC = null;
 let fnReleaseDC = null;
 let fnGetSystemMetrics = null;
@@ -316,8 +340,16 @@ let fnBitBlt = null;
 let fnCreateCompatibleBitmap = null;
 let fnGetDIBits = null;
 let fnSetWindowPos = null;
+let fnBringWindowToTop = null;
+let fnGetForegroundWindow = null;
+let fnSetForegroundWindow = null;
+let fnAllowSetForegroundWindow = null;
+let fnGetWindowThreadProcessId = null;
+let fnAttachThreadInput = null;
+let fnGetCurrentThreadId = null;
 let BITMAPINFOHEADER = null;
 let electronNativeImage = null;
+let savedForegroundHwnd = null;
 
 function initGdiCapture() {
   if (fnBitBlt && fnGetDIBits) return true;
@@ -331,11 +363,33 @@ function initGdiCapture() {
   try {
     if (!user32Lib) user32Lib = koffi.load('user32.dll');
     if (!gdi32Lib) gdi32Lib = koffi.load('gdi32.dll');
+    if (!kernel32Lib) {
+      try { kernel32Lib = koffi.load('kernel32.dll'); } catch (e) {}
+    }
 
     if (!fnGetDC) fnGetDC = user32Lib.func('intptr_t __stdcall GetDC(intptr_t hWnd)');
     if (!fnReleaseDC) fnReleaseDC = user32Lib.func('int __stdcall ReleaseDC(intptr_t hWnd, intptr_t hDC)');
     if (!fnGetSystemMetrics) fnGetSystemMetrics = user32Lib.func('int __stdcall GetSystemMetrics(int nIndex)');
     if (!fnSetWindowPos) fnSetWindowPos = user32Lib.func('int __stdcall SetWindowPos(intptr_t hWnd, intptr_t hWndInsertAfter, int X, int Y, int cx, int cy, uint32_t uFlags)');
+    if (!fnBringWindowToTop) fnBringWindowToTop = user32Lib.func('int __stdcall BringWindowToTop(intptr_t hWnd)');
+    if (!fnGetForegroundWindow) {
+      try { fnGetForegroundWindow = user32Lib.func('intptr_t __stdcall GetForegroundWindow()'); } catch (e) {}
+    }
+    if (!fnSetForegroundWindow) {
+      try { fnSetForegroundWindow = user32Lib.func('int __stdcall SetForegroundWindow(intptr_t hWnd)'); } catch (e) {}
+    }
+    if (!fnAllowSetForegroundWindow) {
+      try { fnAllowSetForegroundWindow = user32Lib.func('int __stdcall AllowSetForegroundWindow(uint32_t dwProcessId)'); } catch (e) {}
+    }
+    if (!fnGetWindowThreadProcessId) {
+      try { fnGetWindowThreadProcessId = user32Lib.func('uint32 __stdcall GetWindowThreadProcessId(intptr_t hWnd, void *lpdwProcessId)'); } catch (e) {}
+    }
+    if (!fnAttachThreadInput) {
+      try { fnAttachThreadInput = user32Lib.func('int __stdcall AttachThreadInput(uint32_t idAttach, uint32_t idAttachTo, int fAttach)'); } catch (e) {}
+    }
+    if (kernel32Lib && !fnGetCurrentThreadId) {
+      try { fnGetCurrentThreadId = kernel32Lib.func('uint32 __stdcall GetCurrentThreadId()'); } catch (e) {}
+    }
 
     if (!fnCreateCompatibleDC) fnCreateCompatibleDC = gdi32Lib.func('intptr_t __stdcall CreateCompatibleDC(intptr_t hDC)');
     if (!fnDeleteDC) fnDeleteDC = gdi32Lib.func('int __stdcall DeleteDC(intptr_t hDC)');
@@ -370,7 +424,224 @@ function initGdiCapture() {
   }
 }
 
+function initNativeCapture() {
+  if (isCaptureLoaded) return true;
+  try {
+    if (!koffi) {
+      koffi = require('koffi');
+    }
+  } catch (e) {
+    return false;
+  }
+
+  const candidatePaths = [
+    path.join(__dirname, 'NativeScreenCapture.dll'),
+    path.join(__dirname, 'native_capture', 'NativeScreenCapture.dll'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'NativeScreenCapture.dll') : null
+  ].filter(Boolean);
+
+  let targetDll = null;
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      targetDll = p;
+      break;
+    }
+  }
+
+  if (!targetDll) {
+    return false;
+  }
+
+  try {
+    captureLib = koffi.load(targetDll);
+    fnStartNativeScreenSelection = captureLib.func('int __stdcall StartNativeScreenSelection(_Out_ uint8_t *outJpegBuf, int maxBytes, _Out_ int *outJpegSize, _Out_ int *outX, _Out_ int *outY, _Out_ int *outW, _Out_ int *outH, int autoConfirmOnRelease, _Out_ int *outCategory)');
+    try {
+      fnGetLastSelectedCategory = captureLib.func('int __stdcall GetLastSelectedCategory()');
+    } catch (e) {}
+    fnNativeCaptureScreenFreezeJpeg = captureLib.func('int __stdcall NativeCaptureScreenFreezeJpeg(_Out_ uint8_t *outJpegBuf, int maxBytes, _Out_ int *outJpegSize, _Out_ int *outWidth, _Out_ int *outHeight, int quality)');
+    fnNativeCropScreenRectToJpeg = captureLib.func('int __stdcall NativeCropScreenRectToJpeg(int x, int y, int w, int h, _Out_ uint8_t *outJpegBuf, int maxBytes, _Out_ int *outJpegSize, int quality)');
+    fnCancelNativeScreenCapture = captureLib.func('void __stdcall CancelNativeScreenCapture()');
+
+    if (!sharedCaptureBuffer) {
+      sharedCaptureBuffer = Buffer.alloc(CAPTURE_BUFFER_CAPACITY);
+      sharedJpegSize = [0];
+      sharedWidth = [0];
+      sharedHeight = [0];
+      sharedX = [0];
+      sharedY = [0];
+      sharedW = [0];
+      sharedH = [0];
+    }
+
+    isCaptureLoaded = true;
+    console.log(`[NativeBridge] Successfully loaded NativeScreenCapture.dll: ${targetDll}`);
+    return true;
+  } catch (err) {
+    console.warn('[NativeBridge] Failed to load NativeScreenCapture.dll:', err.message);
+    return false;
+  }
+}
+
+const NATIVE_CATEGORY_KEY_MAP = {
+  1: 'answer',
+  2: 'explain',
+  3: 'summarize',
+  4: 'translate_th',
+  5: 'proofread',
+  6: 'shorten',
+  7: 'continue_writing',
+  8: 'define',
+  9: 'custom_ask'
+};
+
+function isNativeCaptureAvailable() {
+  return isCaptureLoaded || initNativeCapture();
+}
+
+function startNativeScreenSelectionAsync(autoConfirmOnRelease = 1) {
+  return new Promise((resolve) => {
+    if (!initNativeCapture() || !fnStartNativeScreenSelection) {
+      return resolve({ success: false, reason: 'dll_unavailable' });
+    }
+
+    try {
+      const buf = Buffer.alloc(12 * 1024 * 1024);
+      const outSize = [0];
+      const outX = [0], outY = [0], outW = [0], outH = [0];
+      const outCategory = [1];
+
+      fnStartNativeScreenSelection.async(
+        buf,
+        buf.length,
+        outSize,
+        outX,
+        outY,
+        outW,
+        outH,
+        autoConfirmOnRelease ? 1 : 0,
+        outCategory,
+        (err, res) => {
+          if (err || res !== 1 || outSize[0] <= 0) {
+            return resolve({ success: false, reason: err ? err.message : 'cancelled' });
+          }
+
+          const jpegBuf = buf.subarray(0, outSize[0]);
+          const dataUrl = 'data:image/jpeg;base64,' + jpegBuf.toString('base64');
+          const rect = {
+            x: outX[0],
+            y: outY[0],
+            w: outW[0],
+            h: outH[0]
+          };
+          const categoryId = (outCategory && outCategory[0]) ? outCategory[0] : 1;
+          const categoryKey = NATIVE_CATEGORY_KEY_MAP[categoryId] || 'answer';
+
+          return resolve({
+            success: true,
+            rect,
+            dataUrl,
+            jpegBuffer: jpegBuf,
+            categoryId,
+            categoryKey
+          });
+        }
+      );
+    } catch (e) {
+      console.warn('[NativeBridge] startNativeScreenSelectionAsync error:', e);
+      return resolve({ success: false, reason: e.message });
+    }
+  });
+}
+
+function cancelNativeScreenCapture() {
+  if (isCaptureLoaded && fnCancelNativeScreenCapture) {
+    try {
+      fnCancelNativeScreenCapture();
+    } catch (e) {}
+  }
+}
+
+function captureScreenFreezeNativeFast(quality = 78) {
+  if (!initNativeCapture() || !fnNativeCaptureScreenFreezeJpeg) return null;
+  const t0 = Date.now();
+  try {
+    sharedJpegSize[0] = 0;
+    sharedWidth[0] = 0;
+    sharedHeight[0] = 0;
+    const ok = fnNativeCaptureScreenFreezeJpeg(sharedCaptureBuffer, sharedCaptureBuffer.length, sharedJpegSize, sharedWidth, sharedHeight, quality);
+    if (!ok || sharedJpegSize[0] <= 0) return null;
+
+    const vw = sharedWidth[0];
+    const vh = sharedHeight[0];
+    const jpegBuf = Buffer.from(sharedCaptureBuffer.buffer, sharedCaptureBuffer.byteOffset, sharedJpegSize[0]);
+    const dataUrl = 'data:image/jpeg;base64,' + jpegBuf.toString('base64');
+    const elapsedMs = Date.now() - t0;
+
+    let nativeImg = null;
+    if (!electronNativeImage) {
+      try {
+        electronNativeImage = require('electron').nativeImage;
+      } catch (e) {}
+    }
+    if (electronNativeImage) {
+      try {
+        nativeImg = electronNativeImage.createFromBuffer(jpegBuf);
+      } catch (e) {}
+    }
+
+    return {
+      bounds: { x: 0, y: 0, width: vw, height: vh },
+      nativeImage: nativeImg,
+      jpegBuffer: jpegBuf,
+      dataUrl,
+      frame: {
+        displayId: 'virtual-screen',
+        x: 0,
+        y: 0,
+        width: vw,
+        height: vh,
+        dataUrl
+      },
+      elapsedMs
+    };
+  } catch (err) {
+    console.warn('[NativeBridge] captureScreenFreezeNativeFast error:', err.message);
+    return null;
+  }
+}
+
+function cropFreezeImageNativeFast(rect, quality = 80) {
+  if (!initNativeCapture() || !fnNativeCropScreenRectToJpeg || !rect || rect.w <= 0 || rect.h <= 0) return null;
+  try {
+    const cropBuf = Buffer.alloc(4 * 1024 * 1024);
+    const cropSize = [0];
+    const ok = fnNativeCropScreenRectToJpeg(
+      Math.round(rect.x),
+      Math.round(rect.y),
+      Math.round(rect.w),
+      Math.round(rect.h),
+      cropBuf,
+      cropBuf.length,
+      cropSize,
+      quality
+    );
+    if (ok && cropSize[0] > 0) {
+      const jpegSlice = cropBuf.subarray(0, cropSize[0]);
+      return 'data:image/jpeg;base64,' + jpegSlice.toString('base64');
+    }
+  } catch (err) {
+    console.warn('[NativeBridge] cropFreezeImageNativeFast error:', err.message);
+  }
+  return null;
+}
+
 function captureScreenFreezeNative() {
+  // Ultra-fast path: Native C++ GDI+ Capture to JPEG in RAM (< 15ms, zero disk I/O)
+  const fastRes = captureScreenFreezeNativeFast();
+  if (fastRes) {
+    return fastRes;
+  }
+
   if (!initGdiCapture()) return null;
   const t0 = Date.now();
   try {
@@ -399,7 +670,8 @@ function captureScreenFreezeNative() {
 
     const hOld = fnSelectObject(hdcMem, hBitmap);
     const SRCCOPY = 0x00CC0020;
-    fnBitBlt(hdcMem, 0, 0, vw, vh, hdcScreen, vx, vy, SRCCOPY);
+    const CAPTUREBLT = 0x40000000;
+    fnBitBlt(hdcMem, 0, 0, vw, vh, hdcScreen, vx, vy, SRCCOPY | CAPTUREBLT);
     fnSelectObject(hdcMem, hOld);
 
     const bmi = {
@@ -434,7 +706,7 @@ function captureScreenFreezeNative() {
     const img = electronNativeImage.createFromBitmap(buf, { width: vw, height: vh });
     if (!img || img.isEmpty()) return null;
 
-    const jpegBuf = img.toJPEG(82);
+    const jpegBuf = img.toJPEG(95);
     const dataUrl = 'data:image/jpeg;base64,' + jpegBuf.toString('base64');
     const elapsedMs = Date.now() - t0;
 
@@ -459,6 +731,12 @@ function captureScreenFreezeNative() {
 }
 
 function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
+  // Ultra-fast path: Native C++ Crop to JPEG in RAM (< 1.5ms, zero disk I/O)
+  const fastCrop = cropFreezeImageNativeFast(rect);
+  if (fastCrop) {
+    return fastCrop;
+  }
+
   if (!freezeSnapshot || !freezeSnapshot.nativeImage) return null;
   try {
     const img = freezeSnapshot.nativeImage;
@@ -478,11 +756,12 @@ function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
     const cropped = img.crop({ x, y, width: w, height: h });
     if (cropped.isEmpty()) return null;
 
-    // High-Resolution Vision Clarity & Crisp Quality
+    // Adaptive compression for ultra-low latency vision streaming (< 15ms vision tile ingest)
     let processedImg = cropped;
     const croppedSize = cropped.getSize();
-    const maxDimension = 1536;
-    const jpegQuality = 85;
+    const isLargeArea = (croppedSize.width > 900 || croppedSize.height > 900);
+    const maxDimension = isLargeArea ? 1024 : 800; // 1280 : 1024
+    const jpegQuality = 80; // jpegQuality = 75
 
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
       let newW, newH;
@@ -504,6 +783,92 @@ function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
   return null;
 }
 
+function saveForegroundWindow(excludeWin = null) {
+  if (!initGdiCapture()) return null;
+  try {
+    if (!fnGetForegroundWindow) return null;
+    const currentFg = fnGetForegroundWindow();
+    if (!currentFg || currentFg === 0) return null;
+
+    if (excludeWin && !excludeWin.isDestroyed()) {
+      try {
+        const handleBuf = excludeWin.getNativeWindowHandle();
+        if (handleBuf && handleBuf.length >= 4) {
+          const excludeHwnd = (handleBuf.length >= 8) ? handleBuf.readBigInt64LE(0) : handleBuf.readInt32LE(0);
+          if (currentFg === excludeHwnd) return null;
+        }
+      } catch (e) {}
+    }
+
+    savedForegroundHwnd = currentFg;
+    return savedForegroundHwnd;
+  } catch (e) {
+    console.warn('[NativeBridge] saveForegroundWindow error:', e);
+  }
+  return null;
+}
+
+function restoreForegroundWindow(targetHwnd = null) {
+  if (!initGdiCapture()) return false;
+  try {
+    const hwndToRestore = targetHwnd || savedForegroundHwnd;
+    if (!hwndToRestore || hwndToRestore === 0) {
+      savedForegroundHwnd = null;
+      return false;
+    }
+
+    if (fnAllowSetForegroundWindow) {
+      try { fnAllowSetForegroundWindow(0xFFFFFFFF); } catch (e) {}
+    }
+
+    let attached = false;
+    let curThread = 0;
+    let targetThread = 0;
+    if (fnGetCurrentThreadId && fnGetWindowThreadProcessId && fnAttachThreadInput) {
+      try {
+        curThread = fnGetCurrentThreadId();
+        targetThread = fnGetWindowThreadProcessId(hwndToRestore, null);
+        if (curThread && targetThread && curThread !== targetThread) {
+          attached = (fnAttachThreadInput(curThread, targetThread, 1) !== 0);
+        }
+      } catch (e) {}
+    }
+
+    try {
+      if (fnBringWindowToTop) {
+        try { fnBringWindowToTop(hwndToRestore); } catch (e) {}
+      }
+      if (fnSetForegroundWindow) {
+        fnSetForegroundWindow(hwndToRestore);
+      }
+    } finally {
+      if (attached && fnAttachThreadInput) {
+        try { fnAttachThreadInput(curThread, targetThread, 0); } catch (e) {}
+      }
+    }
+
+    savedForegroundHwnd = null;
+    return true;
+  } catch (e) {
+    console.warn('[NativeBridge] restoreForegroundWindow error:', e);
+  }
+  savedForegroundHwnd = null;
+  return false;
+}
+
+function getSavedForegroundWindow() {
+  return savedForegroundHwnd;
+}
+
+function getLastSelectedCategoryNative() {
+  if (isCaptureLoaded && fnGetLastSelectedCategory) {
+    try {
+      return fnGetLastSelectedCategory();
+    } catch (e) {}
+  }
+  return 1;
+}
+
 module.exports = {
   initNativeBridge,
   isDllAvailable,
@@ -521,6 +886,17 @@ module.exports = {
   startHookPolling,
   stopHookPolling,
   initGdiCapture,
+  initNativeCapture,
+  isNativeCaptureAvailable,
+  startNativeScreenSelectionAsync,
+  cancelNativeScreenCapture,
+  getLastSelectedCategoryNative,
+  NATIVE_CATEGORY_KEY_MAP,
+  captureScreenFreezeNativeFast,
+  cropFreezeImageNativeFast,
   captureScreenFreezeNative,
-  cropFreezeImageNative
+  cropFreezeImageNative,
+  saveForegroundWindow,
+  restoreForegroundWindow,
+  getSavedForegroundWindow
 };

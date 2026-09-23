@@ -37,33 +37,28 @@
 
   <!-- QUICK TEXT FLOATING TOOLBAR & ANSWER CONTAINER -->
   <div class="quick-text-container" id="quickTextContainer" style="display: none;">
-    <!-- Floating Action Toolbar (Gemini Single Sleek Horizontal Pill) -->
+    <!-- Floating Action Toolbar (Single Sleek Horizontal Pill matching Quick Text Ask) -->
     <div class="quick-text-toolbar" id="quickTextToolbar">
-      <!-- 1. Drag Handle: 6 small dots in 2 vertical columns (⋮⋮) -->
-      <div class="drag-handle" title="ลากเพื่อย้ายตำแหน่ง">
-        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-          <circle cx="2.5" cy="2.5" r="1.2"/>
-          <circle cx="7.5" cy="2.5" r="1.2"/>
-          <circle cx="2.5" cy="7" r="1.2"/>
-          <circle cx="7.5" cy="7" r="1.2"/>
-          <circle cx="2.5" cy="11.5" r="1.2"/>
-          <circle cx="7.5" cy="11.5" r="1.2"/>
+      <!-- 1. Dedicated Prominent Drag Handle (Large 32x32 hit target) -->
+      <div class="drag-handle" title="คลิกค้างแล้วลากเพื่อย้ายตำแหน่ง">
+        <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor">
+          <circle cx="3" cy="3" r="1.5"/>
+          <circle cx="9" cy="3" r="1.5"/>
+          <circle cx="3" cy="8" r="1.5"/>
+          <circle cx="9" cy="8" r="1.5"/>
+          <circle cx="3" cy="13" r="1.5"/>
+          <circle cx="9" cy="13" r="1.5"/>
         </svg>
       </div>
 
       <!-- 2. Action Cards: 1-9 dynamic prompt options -->
       <div class="quick-actions-list" id="quickActionsList">
-        <!-- Dynamic prompt buttons populated by script.js with inline SVGs and number badges 1-9 -->
+        <!-- Dynamic prompt buttons populated by script.js with number badges 1-9 -->
       </div>
 
       <!-- 3. Custom Ask Button: ? ถามเอง -->
-      <button class="quick-action-btn custom-ask-btn" id="quickCustomToggleBtn" type="button" title="พิมพ์คำถามเอง [?]" onclick="toggleQuickCustomInput()">
+      <button class="quick-action-btn custom-ask-btn" id="quickCustomToggleBtn" type="button" title="พิมพ์คำถามเอง หรือเพิ่มถาม [?]" onclick="toggleQuickCustomInput()">
         <span class="quick-action-num">?</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
         <span class="quick-action-label">ถามเอง</span>
       </button>
 
@@ -72,32 +67,73 @@
         <span class="quick-action-num esc-badge">Esc</span>
         <span class="quick-action-label">ยกเลิก</span>
       </button>
+
+      <!-- Inline Custom Ask Input Box (Active inside pill when ? is clicked) -->
+      <div class="quick-custom-box" id="quickCustomBox" style="display: none;">
+        <button class="quick-back-btn" id="quickBackBtn" type="button" title="ย้อนกลับ [Esc]" onclick="toggleQuickCustomInput()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div class="quick-custom-input-wrap">
+          <input type="text" class="quick-custom-input" id="quickCustomInput" placeholder="พิมพ์คำสั่งหรือคำถามสำหรับพื้นที่นี้... (กด Enter เพื่อถาม)" onkeydown="handleQuickCustomKeyDown(event)">
+        </div>
+        <button class="quick-custom-send" id="quickCustomSendBtn" type="button" onclick="submitQuickCustomAsk()" title="ส่งคำถาม [Enter]">
+          ส่งคำถาม
+        </button>
+      </div>
     </div>
 
-    <!-- Custom Query Input (Expanded on toggle) -->
-    <div class="quick-custom-box" id="quickCustomBox" style="display: none;">
-      <input type="text" class="quick-custom-input" id="quickCustomInput" placeholder="พิมพ์คำสั่งหรือคำถามสำหรับข้อความนี้..." onkeydown="handleQuickCustomKeyDown(event)">
-      <button class="quick-custom-send" onclick="submitQuickCustomAsk()" title="ส่งคำถาม">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Selected Text Snippet Preview -->
-    <div class="quick-snippet-preview" id="quickSnippetPreview" style="display: none;">
-      <span class="snippet-label">ข้อความ:</span>
-      <span class="snippet-text" id="quickSnippetText"></span>
-    </div>
-
-    <!-- Sleek Floating Answer Card -->
+    <!-- Floating Answer Card (Matching Quick Text Ask UI) -->
     <div class="quick-answer-card" id="quickAnswerCard" style="display: none;">
-      <div class="quick-answer-header">
+      <div class="quick-answer-header" title="คลิกค้างแล้วลากเพื่อย้ายหน้าต่าง">
         <div class="quick-answer-title-group">
-          <span class="quick-action-badge" id="quickAnswerActionBadge">สรุปสั้น</span>
+          <span class="quick-action-badge" id="quickAnswerActionBadge">คำตอบ</span>
           <span class="quick-status-text" id="quickAnswerStatus">กำลังประมวลผล...</span>
         </div>
         <div class="quick-answer-actions">
+          <!-- Custom-Built Modern AI Model Dropdown (Red Box Area) -->
+          <div class="quick-model-selector-wrap custom-model-dropdown" id="customModelDropdown">
+            <button type="button" class="custom-model-trigger" id="customModelTrigger" onclick="toggleCustomModelMenu(event)" title="สลับโมเดล AI เพื่อตอบใหม่ทันที">
+              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3.8 Flash</span>
+              <svg class="custom-model-arrow" width="9" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 1l4 4 4-4"/>
+              </svg>
+            </button>
+            <div class="custom-model-menu" id="customModelMenu" style="display: none;">
+              <div class="custom-model-item active" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
+                <span class="model-item-name">Gemini 3.8 Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3.5-flash-lite" onclick="selectCustomModel('gemini-3.5-flash-lite', 'Gemini 3.5 Flash Lite')">
+                <span class="model-item-name">Gemini 3.5 Flash Lite</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3.1-pro-preview" onclick="selectCustomModel('gemini-3.1-pro-preview', 'Gemini 3.1 Pro Preview')">
+                <span class="model-item-name">Gemini 3.1 Pro Preview</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3-flash-preview" onclick="selectCustomModel('gemini-3-flash-preview', 'Gemini 3 Flash')">
+                <span class="model-item-name">Gemini 3 Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+            </div>
+            <!-- Hidden native select element for backward-compat and test parity -->
+            <select class="quick-model-select" id="quickModelSelect" style="display: none;" onchange="handleQuickModelChange(this.value)">
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+            </select>
+          </div>
+          <button class="quick-card-btn" id="quickSpeakBtn" title="อ่านออกเสียง" onclick="toggleQuickSpeak()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+            <span id="quickSpeakLabel">อ่านเสียง</span>
+          </button>
           <button class="quick-card-btn" title="คัดลอกคำตอบ" onclick="copyQuickAnswer()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -105,7 +141,7 @@
             </svg>
             <span id="quickCopyLabel">คัดลอก</span>
           </button>
-          <button class="quick-card-btn close" title="ปิด (Esc)" onclick="closeQuickTextUI()">
+          <button class="quick-card-btn close" title="ปิดผลลัพธ์ (Esc)" onclick="closeQuickAnswerCard()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -245,7 +281,14 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
               <span>Gemini API Key</span>
             </label>
-            <input type="password" id="apiKeyInput" class="form-input" placeholder="วาง API Key ที่นี่...">
+            <div style="position:relative; display:flex; align-items:center;">
+              <input type="password" id="apiKeyInput" class="form-input" style="padding-right:38px;" placeholder="วาง API Key ที่นี่...">
+              <button type="button" id="toggleApiKeyVisibility" style="position:absolute; right:8px; background:none; border:none; cursor:pointer; color:#64748b; padding:4px; display:flex; align-items:center; justify-content:center;" title="แสดง/ซ่อน API Key">
+                <svg id="eyeIconOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg id="eyeIconClosed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+            <div id="apiKeyWarningMsg" style="display:none; color:#ef4444; font-size:0.75rem; margin-top:4px; font-weight:500;"></div>
             <small class="form-hint">รับ API Key ฟรีที่ <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#0284c7; font-weight:600;">Google AI Studio ↗</a></small>
           </div>
 

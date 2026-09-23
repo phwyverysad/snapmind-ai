@@ -1,7 +1,7 @@
 {
   "name": "snapmind-ai",
   "productName": "SnapMind AI",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "SnapMind AI - Electron AI Screen Scanner powered by Google AI Studio Gemini API",
   "main": "main.js",
   "scripts": {
@@ -67,6 +67,7 @@
     "extraResources": [
       "GeminiTextCopy.dll",
       "hotkey_hook.dll",
+      "NativeScreenCapture.dll",
       "SnapMind.ico"
     ],
     "win": {
@@ -87,7 +88,8 @@
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "ia32"
           ]
         }
       ],

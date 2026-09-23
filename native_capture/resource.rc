@@ -1,0 +1,4 @@
+#include <windows.h>
+
+// Embed manifest
+1 24 "src\\app.manifest"

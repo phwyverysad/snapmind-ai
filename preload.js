@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Screen Snipping & Capture
   cropArea: (bounds) => ipcRenderer.invoke('crop-area', bounds),
+  screenAreaSelected: (rect, preCroppedDataUrl) => ipcRenderer.invoke('screen-area-selected', rect, preCroppedDataUrl),
+  startNativeScreenSelection: (autoConfirm) => ipcRenderer.invoke('start-native-screen-selection', autoConfirm),
+  isNativeCaptureAvailable: () => ipcRenderer.invoke('is-native-capture-available'),
   getDisplayBounds: () => ipcRenderer.invoke('get-display-bounds'),
   getFreezeScreenFrames: () => ipcRenderer.invoke('get-freeze-screen-frames'),
   onFreezeScreenSnapshot: (callback) => {
@@ -31,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Gemini AI Processing (Secure Main Process IPC)
   analyzeScreen: (base64Image, modelId) => ipcRenderer.invoke('gemini-analyze-screen', { base64Image, modelId }),
   analyzeScreenStream: (base64Image, modelId) => ipcRenderer.invoke('gemini-analyze-screen-stream', { base64Image, modelId }),
+  cropAndAnalyzeScreenStream: (params) => ipcRenderer.invoke('crop-and-analyze-screen-stream', params),
+  fetchCategory: (params) => ipcRenderer.invoke('gemini-fetch-category', params),
   sendChatMessage: (query, modelId, context, history) => ipcRenderer.invoke('gemini-chat-message', { query, modelId, context, history }),
 
   // Gemini Tools (@google/genai SDK & Interactions API)
@@ -66,12 +71,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTextFile: (content, defaultFilename) => ipcRenderer.invoke('save-text-file', { content, defaultFilename }),
   saveImageFile: (dataUrl, defaultFilename) => ipcRenderer.invoke('save-image-file', { dataUrl, defaultFilename }),
 
-  // Event Listeners
+  // Event Listeners & Modal Triggers
+  openSettings: () => ipcRenderer.send('open-settings'),
+  openHistory: () => ipcRenderer.send('open-history'),
   onStartSnipping: (callback) => ipcRenderer.on('start-snipping', (event, frames) => callback(frames)),
   onCancelSnipping: (callback) => ipcRenderer.on('cancel-snipping-ui', () => callback()),
   onOpenSettings: (callback) => ipcRenderer.on('open-settings-ui', () => callback()),
   onOpenHistory: (callback) => ipcRenderer.on('open-history-ui', () => callback()),
   onModelChangedFromTray: (callback) => ipcRenderer.on('model-changed-from-tray', (event, modelId) => callback(modelId)),
+  setActiveModel: (modelId) => ipcRenderer.invoke('set-active-model', modelId),
+  onModelChanged: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('model-changed', handler);
+    return () => ipcRenderer.removeListener('model-changed', handler);
+  },
 
   // Quick Text Ask (Floating Toolbar) & Custom Prompts
   getTextPrompts: () => ipcRenderer.invoke('get-text-prompts'),
