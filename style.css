@@ -2185,6 +2185,52 @@ body.dragging-toolbar {
   border-color: #fca5a5;
 }
 
+.quick-card-btn.pin-btn.pinned {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+.quick-card-btn.pin-btn.pinned svg {
+  stroke: #ffffff;
+}
+
+/* === BOTTOM RESIZE HANDLE (DOWNWARDS EXPANSION ONLY) === */
+.quick-answer-resize-bottom {
+  height: 16px;
+  width: 100%;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  user-select: none;
+  touch-action: none;
+  -webkit-app-region: no-drag !important;
+  transition: background 0.15s ease;
+}
+
+.quick-answer-resize-bottom:hover,
+.quick-answer-resize-bottom:active {
+  background: #e2e8f0;
+}
+
+.quick-answer-resize-bottom .resize-handle-bar {
+  width: 48px;
+  height: 4px;
+  background: #94a3b8;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+.quick-answer-resize-bottom:hover .resize-handle-bar,
+.quick-answer-resize-bottom:active .resize-handle-bar {
+  background: #0284c7;
+}
+
 /* === ANSWER BODY TYPOGRAPHY === */
 .quick-answer-body {
   padding: 14px 18px;
@@ -2587,6 +2633,11 @@ body.dragging-toolbar {
 .thinking-model-tag.pro {
   background: #ede9fe;
   color: #7c3aed;
+}
+
+.thinking-model-tag.deepseek {
+  background: #e0e7ff;
+  color: #4338ca;
 }
 
 .thinking-model-desc {

@@ -96,13 +96,17 @@
           <!-- Custom-Built Modern AI Model Dropdown (Red Box Area) -->
           <div class="quick-model-selector-wrap custom-model-dropdown" id="customModelDropdown">
             <button type="button" class="custom-model-trigger" id="customModelTrigger" onclick="toggleCustomModelMenu(event)" title="สลับโมเดล AI เพื่อตอบใหม่ทันที">
-              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3.8 Flash</span>
+              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3 Flash</span>
               <svg class="custom-model-arrow" width="9" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 1l4 4 4-4"/>
               </svg>
             </button>
             <div class="custom-model-menu" id="customModelMenu" style="display: none;">
-              <div class="custom-model-item active" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
+              <div class="custom-model-item active" data-model="gemini-3-flash-preview" onclick="selectCustomModel('gemini-3-flash-preview', 'Gemini 3 Flash')">
+                <span class="model-item-name">Gemini 3 Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
                 <span class="model-item-name">Gemini 3.8 Flash</span>
                 <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
@@ -114,17 +118,23 @@
                 <span class="model-item-name">Gemini 3.1 Pro Preview</span>
                 <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
-              <div class="custom-model-item" data-model="gemini-3-flash-preview" onclick="selectCustomModel('gemini-3-flash-preview', 'Gemini 3 Flash')">
-                <span class="model-item-name">Gemini 3 Flash</span>
+              <div class="custom-model-item" data-model="deepseek-flash" onclick="selectCustomModel('deepseek-flash', 'DeepSeek Flash')">
+                <span class="model-item-name">DeepSeek Flash</span>
+                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="custom-model-item" data-model="deepseek-v4-pro" onclick="selectCustomModel('deepseek-v4-pro', 'DeepSeek V4 Pro')">
+                <span class="model-item-name">DeepSeek V4 Pro</span>
                 <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
             </div>
             <!-- Hidden native select element for backward-compat and test parity -->
             <select class="quick-model-select" id="quickModelSelect" style="display: none;" onchange="handleQuickModelChange(this.value)">
+              <option value="gemini-3-flash-preview" selected>Gemini 3 Flash</option>
               <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
               <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+              <option value="deepseek-flash">DeepSeek Flash</option>
+              <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
             </select>
           </div>
           <button class="quick-card-btn" id="quickSpeakBtn" title="อ่านออกเสียง" onclick="toggleQuickSpeak()">
@@ -134,14 +144,28 @@
             </svg>
             <span id="quickSpeakLabel">อ่านเสียง</span>
           </button>
-          <button class="quick-card-btn" title="คัดลอกคำตอบ" onclick="copyQuickAnswer()">
+          <button class="quick-card-btn" id="quickHistoryBtn" title="ประวัติการถาม AI" onclick="openHistoryModal()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span id="quickHistoryLabel">ประวัติ</span>
+          </button>
+          <button class="quick-card-btn pin-btn" id="quickPinBtn" title="ปักหมุดค้างบนหน้าจอ (Always on Top)" onclick="togglePinQuickAnswer()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="17" x2="12" y2="22"></line>
+              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+            </svg>
+            <span id="quickPinLabel">ปักหมุด</span>
+          </button>
+          <button class="quick-card-btn" id="quickCopyBtn" title="คัดลอกคำตอบ" onclick="copyQuickAnswer()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
               <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
             </svg>
             <span id="quickCopyLabel">คัดลอก</span>
           </button>
-          <button class="quick-card-btn close" title="ปิดผลลัพธ์ (Esc)" onclick="closeQuickAnswerCard()">
+          <button class="quick-card-btn close" id="quickCloseBtn" title="ปิดผลลัพธ์ (Esc)" onclick="closeQuickAnswerCard()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -150,6 +174,9 @@
       </div>
       <div class="quick-answer-body" id="quickAnswerBody">
         <!-- Markdown content streamed live -->
+      </div>
+      <div class="quick-answer-resize-bottom" id="quickAnswerResizeBottom" title="คลิกค้างแล้วลากลงด้านล่างเพื่อขยายขนาด">
+        <div class="resize-handle-bar"></div>
       </div>
     </div>
   </div>
@@ -292,6 +319,23 @@
             <small class="form-hint">รับ API Key ฟรีที่ <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#0284c7; font-weight:600;">Google AI Studio ↗</a></small>
           </div>
 
+          <!-- DEEPSEEK API KEY INPUT -->
+          <div class="form-group">
+            <label for="deepseekApiKeyInput" style="display:flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+              <span>DeepSeek API Key</span>
+            </label>
+            <div style="position:relative; display:flex; align-items:center;">
+              <input type="password" id="deepseekApiKeyInput" class="form-input" style="padding-right:38px;" placeholder="sk-...">
+              <button type="button" id="toggleDeepseekApiKeyVisibility" style="position:absolute; right:8px; background:none; border:none; cursor:pointer; color:#64748b; padding:4px; display:flex; align-items:center; justify-content:center;" title="แสดง/ซ่อน API Key">
+                <svg id="deepseekEyeIconOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg id="deepseekEyeIconClosed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+            <div id="deepseekApiKeyWarningMsg" style="display:none; color:#ef4444; font-size:0.75rem; margin-top:4px; font-weight:500;"></div>
+            <small class="form-hint">รับ API Key ได้ที่ <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:#0284c7; font-weight:600;">DeepSeek Platform ↗</a></small>
+          </div>
+
           <!-- SHORTCUTS GRID -->
           <div class="settings-grid-2col">
             <div class="form-group">
@@ -333,7 +377,7 @@
             </label>
             <div class="custom-modal-dropdown" id="modalModelDropdown">
               <button class="modal-dropdown-trigger" type="button" id="modalModelTrigger" onclick="toggleModalModelDropdown(event)">
-                <span id="modalSelectedModelName">Gemini 3.8 Flash</span>
+                <span id="modalSelectedModelName">Gemini 3 Flash</span>
                 <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>

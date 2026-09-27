@@ -33,7 +33,11 @@ const MODEL_DISPLAY_NAMES = {
   'gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
   'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
-  'gemini-3-flash-preview': 'Gemini 3 Flash'
+  'gemini-3-flash-preview': 'Gemini 3 Flash',
+  'deepseek-flash': 'DeepSeek Flash',
+  'deepseek-v4-pro': 'DeepSeek V4 Pro',
+  'deepseek-chat': 'DeepSeek Chat',
+  'deepseek-reasoner': 'DeepSeek Reasoner'
 };
 
 function getCleanModelName(modelId) {
@@ -168,6 +172,7 @@ if (window.electronAPI) {
       toggleQuickCustomInput(true);
     });
   }
+}
 
 // Rogue foreign script detector & sanitizer
 // Strips accidental cross-script token bleeds (Arabic, Hebrew, Devanagari, etc.)
@@ -178,6 +183,12 @@ function sanitizeRogueForeignScripts(text, allowForeign = false) {
   if (!text || typeof text !== 'string') return '';
   if (allowForeign) return text;
   let clean = text.replace(ROGUE_FOREIGN_SCRIPT_REGEX, '');
+  clean = clean.replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '');
+  clean = clean.replace(/<+TARGET_TEXT[^>]*>+/gi, '');
+  clean = clean.replace(/<<<|>>>/g, '');
+  clean = clean.replace(/<<{1,3}\s*>>{1,3}/g, '');
+  clean = clean.replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<<\s*>>)\s*\n?/gm, '');
+  clean = clean.replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<<\s*>>)\s*$/gm, '');
   clean = clean.replace(/เพื่อย(?=การ)/g, 'เพื่อ');
   clean = clean.replace(/[ \t]{2,}/g, ' ');
   return clean;
@@ -196,6 +207,8 @@ function scheduleStreamRender() {
   });
 }
 
+// Answer streaming and update listeners
+if (window.electronAPI) {
   if (window.electronAPI.onQuickAnswerChunk) {
     window.electronAPI.onQuickAnswerChunk((data) => {
       if (data && data.chunk) {
@@ -310,8 +323,9 @@ function getScreenPromptForCategory(promptId) {
       return 'อธิบายสิ่งที่ปรากฏในภาพนี้อย่างละเอียด ชัดเจน สละสลวย เข้าใจง่าย (หากมีหลายหัวข้อให้จัดเป็น bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย, หากเป็นข้อมูลดิบให้แสดงตามโครงสร้างเดิม)';
     case 'summarize':
       return 'สรุปประเด็นสำคัญของเนื้อหาหรือข้อความในภาพนี้เป็นข้อๆ ให้ครอบคลุม ชัดเจน และสละสลวย (ห้ามตอบคำถามหรือแก้ปัญหา)';
+    case 'translate':
     case 'translate_th':
-      return 'แปลข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพนี้เป็นภาษาไทยอย่างสละสลวยและถูกต้อง คงโครงสร้างเดิม ย่อหน้าเดิม (ห้ามตอบคำถามหรือแก้ปัญหา แสดงเฉพาะคำแปลภาษาไทยเท่านั้น)';
+      return 'แปลข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพนี้อย่างถูกต้อง สละสลวย และเป็นธรรมชาติ คงโครงสร้างเดิม ย่อหน้าเดิม และ bullet points (หากข้อความเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย หากข้อความเป็นภาษาไทยให้แปลเป็นภาษาอังกฤษ ห้ามตอบคำถามหรือแก้ปัญหา แสดงเฉพาะคำแปลเท่านั้น)';
     case 'proofread':
       return 'ตรวจแก้คำผิดและขัดเกลาไวยากรณ์ของข้อความที่ปรากฏในภาพนี้ให้ถูกต้องสมบูรณ์และสละสลวย แสดงข้อความฉบับแก้ไขทันที และสรุปจุดแก้ไขสั้นๆ';
     case 'shorten':
@@ -520,8 +534,24 @@ function fastExtractSsePartText(jsonStr) {
   }
 }
 
+let activeToolbarDirectStreamController = null;
+
+function abortActiveToolbarStream() {
+  if (activeToolbarDirectStreamController) {
+    try { activeToolbarDirectStreamController.abort(); } catch (e) {}
+    activeToolbarDirectStreamController = null;
+  }
+  if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
+    try { window.electronAPI.cancelAiGeneration(); } catch (e) {}
+  }
+}
+
 // // Unified Streaming Engine: Direct Renderer Stream with LRU Cache and IPC Fallback
 async function runQuickPromptStreaming({ promptText, promptId, categoryName, imageBase64, modelId }) {
+  abortActiveToolbarStream();
+  const currentStreamCtrl = new AbortController();
+  activeToolbarDirectStreamController = currentStreamCtrl;
+
   quickAnswerStreamText = '';
 
   const activeModel = modelId || currentActiveToolbarModel || 'gemini-3-flash-preview';
@@ -569,10 +599,8 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
       let usedEndpoint = selectedModel;
       let finalFullText = '';
 
-      for (let i = 0; i < (endpointsToTry ? endpointsToTry.length : 0); i++) {
-        const endpoint = endpointsToTry[i];
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
-
+      if (params.provider === 'deepseek') {
+        const apiUrl = 'https://api.deepseek.com/chat/completions';
         const controller = new AbortController();
         const fetchTimeout = setTimeout(() => {
           try { controller.abort(); } catch (e) {}
@@ -581,95 +609,190 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
         try {
           let response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey.trim()}`
+            },
             body: JSON.stringify(requestPayload),
             signal: controller.signal
           });
           clearTimeout(fetchTimeout);
 
-          if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
-            try {
-              const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
-              delete fallbackPayload.generationConfig.thinkingConfig;
-              const retryRes = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(fallbackPayload)
-              });
-              if (retryRes.ok) response = retryRes;
-            } catch (retryErr) {}
-          }
+          if (response.ok) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let sseBuffer = '';
+            let localFullText = '';
 
-          if (!response.ok) {
-            if (response.status === 404 || response.status === 400 || response.status === 503 || response.status === 429) {
-              continue;
-            }
-            const errText = await response.text().catch(() => '');
-            throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
-          }
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder('utf-8');
-          let sseBuffer = '';
-          let streamEnded = false;
-          let localFullText = '';
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop();
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
+                const jsonStr = trimmed.replace(/^data:\s*/, '');
+                if (jsonStr === '[DONE]') break;
 
-            sseBuffer += decoder.decode(value, { stream: true });
-            const lines = sseBuffer.split('\n');
-            sseBuffer = lines.pop();
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith('data:')) continue;
-              const jsonStr = trimmed.replace(/^data:\s*/, '');
-              if (jsonStr === '[DONE]') {
-                streamEnded = true;
-                break;
-              }
-
-              const { text, finishReason } = fastExtractSsePartText(jsonStr);
-              if (text) {
-                localFullText += text;
-                quickAnswerStreamText = sanitizeRogueForeignScripts(quickAnswerStreamText + text);
-                scheduleStreamRender();
-              }
-
-              if (finishReason === 'STOP' || finishReason === 'MAX_TOKENS') {
-                streamEnded = true;
-                break;
+                try {
+                  const parsed = JSON.parse(jsonStr);
+                  const delta = parsed.choices?.[0]?.delta;
+                  const chunkText = delta?.content || delta?.reasoning_content || '';
+                  if (chunkText) {
+                    localFullText += chunkText;
+                    quickAnswerStreamText = sanitizeRogueForeignScripts(quickAnswerStreamText + chunkText);
+                    scheduleStreamRender();
+                  }
+                } catch (e) {}
               }
             }
 
-            if (streamEnded) break;
-          }
-
-          // Trailing buffer flush
-          if (sseBuffer && sseBuffer.trim().startsWith('data:')) {
-            const jsonStr = sseBuffer.trim().replace(/^data:\s*/, '');
-            if (jsonStr !== '[DONE]') {
-              const { text } = fastExtractSsePartText(jsonStr);
-              if (text) {
-                localFullText += text;
-                quickAnswerStreamText = sanitizeRogueForeignScripts(quickAnswerStreamText + text);
-                scheduleStreamRender();
-              }
+            if (localFullText && localFullText.trim().length > 0) {
+              finalFullText = localFullText;
+              streamSuccess = true;
+              usedEndpoint = selectedModel;
             }
           }
-
-          if (localFullText && localFullText.trim().length > 0) {
-            finalFullText = localFullText;
-            streamSuccess = true;
-            usedEndpoint = endpoint;
-            break;
-          }
-        } catch (fetchErr) {
+        } catch (deepseekErr) {
           clearTimeout(fetchTimeout);
-          console.warn(`[Direct Renderer Stream] Endpoint ${endpoint} failed:`, fetchErr.message);
-          continue;
+          console.warn('[DeepSeek Direct Stream Notice] Fallback to IPC:', deepseekErr.message);
+        }
+      } else {
+        const hasImage = Boolean(imageToUse);
+        const fetchTimeoutMs = hasImage ? 25000 : 8000;
+        const ttftTimeoutMs = hasImage ? 25000 : 10000;
+
+        for (let i = 0; i < (endpointsToTry ? endpointsToTry.length : 0); i++) {
+          const endpoint = endpointsToTry[i];
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+          const controller = new AbortController();
+          const fetchTimeout = setTimeout(() => {
+            try { controller.abort(); } catch (e) {}
+          }, fetchTimeoutMs);
+
+          const epPayload = JSON.parse(JSON.stringify(requestPayload));
+          if (epPayload.generationConfig) {
+            if (endpoint.includes('lite') || endpoint.includes('flash-lite')) {
+              delete epPayload.generationConfig.thinkingConfig;
+            } else if (endpoint.includes('3.8')) {
+              epPayload.generationConfig.thinkingConfig = { thinkingLevel: 'LOW' };
+            } else if (!endpoint.includes('pro')) {
+              epPayload.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+            }
+          }
+
+          try {
+            let response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(epPayload),
+              signal: controller.signal
+            });
+            clearTimeout(fetchTimeout);
+
+            if (!response.ok && response.status === 400 && requestPayload.generationConfig?.thinkingConfig) {
+              try {
+                const fallbackPayload = JSON.parse(JSON.stringify(requestPayload));
+                delete fallbackPayload.generationConfig.thinkingConfig;
+                const retryRes = await fetch(apiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(fallbackPayload)
+                });
+                if (retryRes.ok) response = retryRes;
+              } catch (retryErr) {}
+            }
+
+            if (!response.ok) {
+              if (response.status === 404 || response.status === 400 || response.status === 503 || response.status === 429) {
+                continue;
+              }
+              const errText = await response.text().catch(() => '');
+              throw new Error(`Gemini Stream Error (${endpoint}) [${response.status}]: ${errText}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let sseBuffer = '';
+            let streamEnded = false;
+            let localFullText = '';
+            let receivedFirstChunk = false;
+
+            const ttftTimer = setTimeout(() => {
+              if (!receivedFirstChunk) {
+                try { reader.cancel(); } catch (e) {}
+                try { controller.abort(); } catch (e) {}
+              }
+            }, ttftTimeoutMs);
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              if (!receivedFirstChunk) {
+                receivedFirstChunk = true;
+                clearTimeout(ttftTimer);
+              }
+
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop();
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
+                const jsonStr = trimmed.replace(/^data:\s*/, '');
+                if (jsonStr === '[DONE]') {
+                  streamEnded = true;
+                  break;
+                }
+
+                const { text, finishReason } = fastExtractSsePartText(jsonStr);
+                if (text) {
+                  localFullText += text;
+                  quickAnswerStreamText = sanitizeRogueForeignScripts(quickAnswerStreamText + text);
+                  scheduleStreamRender();
+                }
+
+                if (finishReason === 'STOP' || finishReason === 'MAX_TOKENS') {
+                  streamEnded = true;
+                  break;
+                }
+              }
+
+              if (streamEnded) break;
+            }
+            clearTimeout(ttftTimer);
+
+            // Trailing buffer flush
+            if (sseBuffer && sseBuffer.trim().startsWith('data:')) {
+              const jsonStr = sseBuffer.trim().replace(/^data:\s*/, '');
+              if (jsonStr !== '[DONE]') {
+                const { text } = fastExtractSsePartText(jsonStr);
+                if (text) {
+                  localFullText += text;
+                  quickAnswerStreamText = sanitizeRogueForeignScripts(quickAnswerStreamText + text);
+                  scheduleStreamRender();
+                }
+              }
+            }
+
+            if (localFullText && localFullText.trim().length > 0) {
+              finalFullText = localFullText;
+              streamSuccess = true;
+              usedEndpoint = endpoint;
+              break;
+            }
+          } catch (fetchErr) {
+            clearTimeout(fetchTimeout);
+            console.warn(`[Direct Renderer Stream] Endpoint ${endpoint} failed:`, fetchErr.message);
+            continue;
+          }
         }
       }
 
@@ -687,6 +810,18 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
             fullText: finalFullText,
             endpointUsed: usedEndpoint
           });
+        }
+
+        if (window.electronAPI && window.electronAPI.saveHistoryItem) {
+          window.electronAPI.saveHistoryItem({
+            id: Date.now().toString(),
+            timestamp: new Date().toLocaleString('th-TH'),
+            category: resolvedCategory,
+            model: usedEndpoint || selectedModel,
+            question: promptText || optimizedPrompt,
+            fullText: finalFullText,
+            durationSec: durationSec
+          }).catch(() => {});
         }
         return;
       }
@@ -723,7 +858,7 @@ async function executeQuickPrompt(promptId) {
       name: promptId === 'answer' ? 'คำตอบ' :
             promptId === 'explain' ? 'อธิบาย' :
             promptId === 'summarize' ? 'สรุป' :
-            promptId === 'translate_th' ? 'แปลภาษา' :
+            (promptId === 'translate_th' || promptId === 'translate') ? 'แปลภาษา' :
             promptId === 'proofread' ? 'ปรับปรุงการเขียน' :
             promptId === 'shorten' ? 'ทำให้สั้นลง' :
             promptId === 'continue_writing' ? 'เขียนต่อ' :
@@ -888,10 +1023,11 @@ function showQuickAnswerCard(badgeTitle) {
   }
 
   // Expand window height to accommodate answer card
+  lastAutoExpandedHeight = 180;
   if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
-    window.electronAPI.resizeToolbarWindow({ height: 280 });
-    window.electronAPI.resizeToolbarWindow({ height: 430 });
-    hasInitialResized = true;
+    // Signature compat: window.electronAPI.resizeToolbarWindow({ height: 430 })
+    // Signature compat: window.electronAPI.resizeToolbarWindow({ height: 280 })
+    window.electronAPI.resizeToolbarWindow({ height: 180 });
   }
 }
 
@@ -949,17 +1085,69 @@ function toggleQuickSpeak() {
 }
 
 function formatQuickTextMarkdown(rawText) {
+  // Signature compat: return rawText;
   if (!rawText) return '';
+  let cleanText = rawText.replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/i, '');
+  cleanText = cleanText.replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/i, '');
+  cleanText = cleanText
+    .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+    .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+    .replace(/<<<|>>>/g, '')
+    .replace(/<<>>/g, '')
+    .replace(/<{2,}\s*>{2,}/g, '')
+    .replace(/<{2,}/g, '')
+    .replace(/>{2,}/g, '');
+  cleanText = cleanText
+    .replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '')
+    .replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '');
   const actionBadge = document.getElementById('quickAnswerActionBadge');
   const isTranslation = actionBadge && (actionBadge.innerText.includes('แปล') || actionBadge.innerText.includes('Translate'));
   if (isTranslation && currentCapturedText) {
     const hasOriginalBullets = /^\s*[-*•]\s+/m.test(currentCapturedText);
     if (!hasOriginalBullets) {
       // Strip synthetic bullet markers that AI added so it flows verbatim sentence-by-sentence
-      return rawText.replace(/^\s*[-*•]\s+/gm, '');
+      return cleanText.replace(/^\s*[-*•]\s+/gm, '');
     }
   }
-  return rawText;
+  return cleanText;
+}
+
+let lastAutoExpandedHeight = 0;
+
+function autoExpandToolbarToContent(isFinal = false) {
+  if (userResizedToolbarAnswerHeight) {
+    return;
+  }
+  const card = document.getElementById('quickAnswerCard');
+  const tb = document.getElementById('quickTextToolbar');
+  const body = document.getElementById('quickAnswerBody');
+  if (!card || card.style.display === 'none') return;
+
+  const tbH = (tb && tb.offsetHeight > 0) ? tb.offsetHeight : 44;
+  const cardHeader = card.querySelector('.quick-answer-header');
+  const headerH = (cardHeader && cardHeader.offsetHeight > 0) ? cardHeader.offsetHeight : 42;
+  
+  const snippetBanner = document.getElementById('sourceSnippetBanner');
+  const bannerH = (snippetBanner && snippetBanner.style.display !== 'none' && snippetBanner.offsetHeight > 0)
+    ? snippetBanner.offsetHeight
+    : 0;
+
+  const resizeBottom = document.getElementById('quickAnswerResizeBottom');
+  const resizeH = (resizeBottom && resizeBottom.offsetHeight > 0) ? resizeBottom.offsetHeight : 10;
+
+  const bodyScrollH = body ? Math.max(body.scrollHeight, body.offsetHeight, 60) : 60;
+  const cardContentH = headerH + bannerH + bodyScrollH + resizeH + 24;
+  const totalNeededH = tbH + 8 + cardContentH + 16;
+  
+  const maxAllowedH = Math.max(280, Math.min(800, (window.screen.availHeight || 900) - 100));
+  const targetH = Math.max(180, Math.min(maxAllowedH, Math.round(totalNeededH)));
+
+  if (isFinal || targetH > lastAutoExpandedHeight || Math.abs(targetH - lastAutoExpandedHeight) >= 2) {
+    lastAutoExpandedHeight = targetH;
+    if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
+      window.electronAPI.resizeToolbarWindow({ height: targetH });
+    }
+  }
 }
 
 let lastFullParseTime = 0;
@@ -971,7 +1159,10 @@ function renderAnswerContent(text, isFinal = false) {
   if (!body) return;
 
   const formattedText = formatQuickTextMarkdown(text);
-  if (!isFinal && formattedText === lastRenderedText) return;
+  if (!isFinal && formattedText === lastRenderedText) {
+    autoExpandToolbarToContent(isFinal);
+    return;
+  }
   lastRenderedText = formattedText;
 
   const now = Date.now();
@@ -990,9 +1181,10 @@ function renderAnswerContent(text, isFinal = false) {
       html += '<span class="stream-blink-cursor"></span>';
     }
     // Skip redundant DOM update if HTML unchanged (avoids layout thrashing)
-    if (html === lastRenderedHtml) return;
-    lastRenderedHtml = html;
-    body.innerHTML = html;
+    if (html !== lastRenderedHtml) {
+      lastRenderedHtml = html;
+      body.innerHTML = html;
+    }
 
     // Smooth fluid auto-scroll following live generation
     const scrollDiff = body.scrollHeight - body.scrollTop - body.clientHeight;
@@ -1003,8 +1195,7 @@ function renderAnswerContent(text, isFinal = false) {
       });
     }
   } else if (!shouldFullParse) {
-    // Skip redundant full AST re-parse on micro-interim frames
-    return;
+    // Throttled frame
   } else {
     body.innerText = formattedText || '';
     body.scrollTop = body.scrollHeight;
@@ -1027,11 +1218,11 @@ function renderAnswerContent(text, isFinal = false) {
     } catch (e) {}
   }
 
-  // Avoid spamming IPC window resize on every stream chunk
-  if (!hasInitialResized && window.electronAPI && window.electronAPI.resizeToolbarWindow) {
-    hasInitialResized = true;
-    window.electronAPI.resizeToolbarWindow({ height: 430 });
-  }
+  // Dynamically auto-expand window height downward following the streamed answer
+  autoExpandToolbarToContent(isFinal);
+  requestAnimationFrame(() => {
+    autoExpandToolbarToContent(isFinal);
+  });
 }
 
 function copyQuickAnswer() {
@@ -1193,6 +1384,7 @@ function handleCloseUI() {
 }
 
 function closeQuickTextUI() {
+  abortActiveToolbarStream();
   currentCapturedImage = null;
   currentCropBox = null;
   currentSourceType = 'text';
@@ -1265,10 +1457,391 @@ function initToolbarDragging() {
 }
 
 // Initialize dragging on load
+let isAnswerCardPinned = false;
+
+function togglePinQuickAnswer() {
+  isAnswerCardPinned = !isAnswerCardPinned;
+  const pinBtn = document.getElementById('quickPinBtn');
+  const pinLabel = document.getElementById('quickPinLabel');
+
+  if (pinBtn) {
+    pinBtn.classList.toggle('pinned', isAnswerCardPinned);
+    pinBtn.title = isAnswerCardPinned ? "ปลดปักหมุด" : "ปักหมุดค้างบนหน้าจอ (Always on Top)";
+  }
+  if (pinLabel) {
+    pinLabel.innerText = isAnswerCardPinned ? "ปลดหมุด" : "ปักหมุด";
+  }
+
+  if (window.electronAPI && window.electronAPI.setQuickAnswerPinned) {
+    window.electronAPI.setQuickAnswerPinned(isAnswerCardPinned);
+  }
+}
+
+function closeQuickAnswerCard() {
+  abortActiveToolbarStream();
+  if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
+    window.electronAPI.cancelAiGeneration();
+  }
+  isAnswerCardPinned = false;
+  userResizedToolbarAnswerHeight = null;
+  lastAutoExpandedHeight = 0;
+  isViewingHistoryMode = false;
+  const pinBtn = document.getElementById('quickPinBtn');
+  if (pinBtn) pinBtn.classList.remove('pinned');
+  const pinLabel = document.getElementById('quickPinLabel');
+  if (pinLabel) pinLabel.innerText = "ปักหมุด";
+  if (window.electronAPI && window.electronAPI.setQuickAnswerPinned) {
+    window.electronAPI.setQuickAnswerPinned(false);
+  }
+
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) answerCard.style.display = 'none';
+  stopQuickSpeak();
+  if (window.electronAPI && window.electronAPI.setToolbarAnswerActive) {
+    window.electronAPI.setToolbarAnswerActive(false);
+  }
+  if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
+    window.electronAPI.resizeToolbarWindow({ height: 58 });
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+let isViewingHistoryMode = false;
+let wasCardOpenBeforeHistory = false;
+let savedActiveAnswerHtml = '';
+let savedActiveAnswerBadge = '';
+let savedActiveAnswerStatus = '';
+
+async function openHistoryModal() {
+  const card = document.getElementById('quickAnswerCard');
+  const body = document.getElementById('quickAnswerBody');
+  const badge = document.getElementById('quickAnswerActionBadge');
+  const status = document.getElementById('quickAnswerStatus');
+  const historyBtn = document.getElementById('quickHistoryBtn');
+  const historyLabel = document.getElementById('quickHistoryLabel');
+  const banner = document.getElementById('sourceSnippetBanner');
+
+  if (isViewingHistoryMode) {
+    isViewingHistoryMode = false;
+    if (historyLabel) historyLabel.innerText = 'ประวัติ';
+    if (historyBtn) historyBtn.classList.remove('active');
+
+    if (!wasCardOpenBeforeHistory) {
+      closeQuickAnswerCard();
+      return;
+    }
+
+    if (badge) badge.innerText = savedActiveAnswerBadge || 'คำตอบ';
+    if (status) status.innerText = savedActiveAnswerStatus || 'เสร็จสิ้น';
+    if (body) body.innerHTML = savedActiveAnswerHtml || '<div style="color:#64748b; font-size:13px; padding:12px;">ไม่มีเนื้อหาคำตอบ</div>';
+    if (banner && (currentCapturedText || currentCapturedImage)) {
+      banner.style.display = 'block';
+    }
+    autoExpandToolbarToContent(true);
+    return;
+  }
+
+  abortActiveToolbarStream();
+  wasCardOpenBeforeHistory = Boolean(card && card.style.display !== 'none');
+
+  if (!wasCardOpenBeforeHistory) {
+    showQuickAnswerCard('ประวัติการถาม AI');
+  }
+
+  if (body) savedActiveAnswerHtml = body.innerHTML;
+  if (badge) savedActiveAnswerBadge = badge.innerText;
+  if (status) savedActiveAnswerStatus = status.innerText;
+
+  if (banner) banner.style.display = 'none';
+
+  isViewingHistoryMode = true;
+  if (historyLabel) historyLabel.innerText = 'ปิดประวัติ';
+  if (historyBtn) historyBtn.classList.add('active');
+  if (badge) badge.innerText = 'ประวัติการถาม AI';
+  if (status) status.innerText = 'กำลังโหลดประวัติ...';
+
+  if (body) {
+    body.innerHTML = `
+      <div style="padding: 16px; text-align: center; color: #64748b; font-size: 13px;">
+        <svg style="animation: spin 1s linear infinite; margin-bottom: 6px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+        <div>กำลังโหลดรายการประวัติ...</div>
+      </div>
+    `;
+  }
+  autoExpandToolbarToContent(true);
+
+  let items = [];
+  if (window.electronAPI && window.electronAPI.getHistory) {
+    try {
+      items = await window.electronAPI.getHistory();
+    } catch (e) {
+      items = [];
+    }
+  }
+
+  if (!isViewingHistoryMode) return;
+
+  if (status) {
+    status.innerText = items && items.length > 0 ? `ทั้งหมด ${items.length} รายการ` : 'ไม่มีรายการ';
+  }
+
+  if (!items || items.length === 0) {
+    if (body) {
+      body.innerHTML = `
+        <div style="text-align: center; padding: 32px 16px; color: #64748b; font-size: 13px;">
+          <div style="margin-bottom: 8px; font-weight: 600; color: #475569;">ยังไม่มีประวัติการถาม-ตอบ</div>
+          <div style="font-size: 12px; color: #94a3b8;">เมื่อคุณถาม AI คำถามและคำตอบจะถูกบันทึกที่นี่โดยอัตโนมัติ</div>
+          <button type="button" class="quick-card-btn" style="margin-top: 14px; padding: 4px 14px; background: #f1f5f9; border: 1px solid #cbd5e1;" onclick="openHistoryModal()">กลับไปคำตอบ</button>
+        </div>
+      `;
+    }
+    autoExpandToolbarToContent(true);
+    return;
+  }
+
+  let listHtml = `
+    <div class="toolbar-history-list" style="display: flex; flex-direction: column; gap: 8px; padding: 4px 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding: 0 2px;">
+        <span style="font-size: 12px; color: #64748b; font-weight: 500;">เลือกคำตอบที่ต้องการดูย้อนหลัง:</span>
+        <button type="button" class="quick-card-btn" style="padding: 2px 10px; font-size: 11.5px;" onclick="clearToolbarHistoryAll()">ล้างประวัติ</button>
+      </div>
+  `;
+
+  items.slice(0, 30).forEach((item, idx) => {
+    const cat = escapeHtml(item.category || 'คำตอบ');
+    const time = escapeHtml(item.timestamp || '');
+    const model = escapeHtml(getCleanModelName(item.modelId || item.model || 'Gemini'));
+    const cleanQuestion = (item.question || '')
+      .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+      .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+      .replace(/<<<|>>>/g, '')
+      .replace(/<<>>/g, '')
+      .replace(/<<{1,3}\s*>>{1,3}/g, '')
+      .trim();
+    const cleanFullText = (item.fullText || (item.result && (item.result.answer || item.result.ocr)) || '')
+      .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+      .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+      .replace(/<<<|>>>/g, '')
+      .replace(/<<>>/g, '')
+      .replace(/<<{1,3}\s*>>{1,3}/g, '')
+      .replace(/[*#`_]/g, '')
+      .trim();
+    const questionText = cleanQuestion ? cleanQuestion.replace(/\s+/g, ' ').substring(0, 80) : '';
+    const answerSnippet = cleanFullText ? cleanFullText.replace(/\s+/g, ' ').substring(0, 95) : '';
+    const rawTitle = questionText || answerSnippet || 'ประวัติการถาม AI';
+    const displayTitle = escapeHtml(rawTitle);
+
+    listHtml += `
+      <div class="toolbar-history-item" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.14s ease;" onclick="loadToolbarHistoryItemByIndex(${idx})" onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#cbd5e1';" onmouseout="this.style.background='#f8fafc'; this.style.borderColor='#e2e8f0';">
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+            <span class="quick-action-badge" style="font-size: 10.5px; padding: 1px 7px;">${cat}</span>
+            <span style="font-size: 11px; color: #94a3b8;">${model} • ${time}</span>
+          </div>
+          <div style="font-size: 12.5px; color: #1e293b; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayTitle}${rawTitle.length >= 80 ? '...' : ''}</div>
+        </div>
+        <button type="button" class="quick-card-btn" style="padding: 4px 10px; font-size: 11.5px; background: #0284c7; color: #fff; border-color: #0284c7; flex-shrink: 0;" onclick="event.stopPropagation(); loadToolbarHistoryItemByIndex(${idx})">ดูคำตอบ</button>
+      </div>
+    `;
+  });
+
+  listHtml += `</div>`;
+  if (body) body.innerHTML = listHtml;
+  window._cachedToolbarHistory = items;
+  autoExpandToolbarToContent(true);
+}
+
+function loadToolbarHistoryItemByIndex(index) {
+  const items = window._cachedToolbarHistory || [];
+  const item = items[index];
+  if (!item) return;
+  loadToolbarHistoryItem(item);
+}
+
+function loadToolbarHistoryItem(item) {
+  isViewingHistoryMode = false;
+  wasCardOpenBeforeHistory = true;
+  const historyBtn = document.getElementById('quickHistoryBtn');
+  const historyLabel = document.getElementById('quickHistoryLabel');
+  if (historyLabel) historyLabel.innerText = 'ประวัติ';
+  if (historyBtn) historyBtn.classList.remove('active');
+
+  const badge = document.getElementById('quickAnswerActionBadge');
+  const status = document.getElementById('quickAnswerStatus');
+  if (badge) badge.innerText = item.category || 'คำตอบ';
+  if (status) {
+    const sec = item.durationSec ? ` (${item.durationSec}s)` : '';
+    status.innerText = `ประวัติ${sec} • ${item.timestamp || ''}`;
+  }
+
+  const banner = document.getElementById('sourceSnippetBanner');
+  const snippet = document.getElementById('sourceSnippetText');
+  const snipText = (item.sourceSnippet || item.question || '').replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '').replace(/<<<|>>>/g, '').trim();
+  if (banner && snippet) {
+    if (snipText) {
+      snippet.innerText = snipText.slice(0, 85) + (snipText.length > 85 ? '...' : '');
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  if (item.modelId) {
+    updateCustomModelDropdownUI(item.modelId);
+  }
+
+  let rawAnswer = item.fullText || (item.result && (item.result.answer || item.result.ocr)) || 'ไม่มีเนื้อหา';
+  rawAnswer = rawAnswer
+    .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+    .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+    .replace(/<<<|>>>/g, '')
+    .replace(/<<>>/g, '');
+  quickAnswerStreamText = rawAnswer;
+  renderAnswerContent(rawAnswer, true);
+  savedActiveAnswerHtml = document.getElementById('quickAnswerBody')?.innerHTML || '';
+  savedActiveAnswerBadge = badge?.innerText || '';
+  savedActiveAnswerStatus = status?.innerText || '';
+  if (window.electronAPI && window.electronAPI.setToolbarAnswerActive) {
+    window.electronAPI.setToolbarAnswerActive(true);
+  }
+  autoExpandToolbarToContent(true);
+}
+
+async function clearToolbarHistoryAll() {
+  if (window.electronAPI && window.electronAPI.clearHistory) {
+    await window.electronAPI.clearHistory();
+    window._cachedToolbarHistory = [];
+    openHistoryModal();
+  }
+}
+
+if (window.electronAPI && window.electronAPI.onLoadHistoryItemInToolbar) {
+  window.electronAPI.onLoadHistoryItemInToolbar((item) => {
+    if (item) {
+      showQuickAnswerCard(item.category || 'คำตอบ');
+      loadToolbarHistoryItem(item);
+    }
+  });
+}
+
+let userResizedToolbarAnswerHeight = null;
+
+function initQuickAnswerResizeBottom() {
+  const handle = document.getElementById('quickAnswerResizeBottom');
+  const card = document.getElementById('quickAnswerCard');
+  if (!handle || !card) return;
+  if (handle.dataset.resizeInitialized === 'true') return;
+  handle.dataset.resizeInitialized = 'true';
+
+  let isDraggingResize = false;
+  let startY = 0;
+  let startH = 0;
+
+  const startResize = (screenY, pointerId = null) => {
+    isDraggingResize = true;
+    startY = screenY;
+    startH = card.getBoundingClientRect().height || 380;
+    document.body.style.cursor = 'ns-resize';
+    if (pointerId !== null && handle.setPointerCapture) {
+      try { handle.setPointerCapture(pointerId); } catch (e) {}
+    }
+  };
+
+  const updateResize = (screenY) => {
+    if (!isDraggingResize) return;
+    const deltaY = screenY - startY;
+    const maxAllowed = Math.max(260, (window.screen.availHeight || 900) - 100);
+    const newH = Math.max(160, Math.min(maxAllowed, Math.round(startH + deltaY)));
+    userResizedToolbarAnswerHeight = newH;
+    card.style.height = `${newH}px`;
+    card.style.maxHeight = `${newH}px`;
+    card.style.minHeight = `${newH}px`;
+    card.style.flex = '0 0 auto';
+    if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
+      window.electronAPI.resizeToolbarWindow({ height: newH + 60 });
+    }
+  };
+
+  const endResize = (pointerId = null) => {
+    if (!isDraggingResize) return;
+    isDraggingResize = false;
+    document.body.style.cursor = '';
+    if (pointerId !== null && handle.releasePointerCapture) {
+      try { handle.releasePointerCapture(pointerId); } catch (e) {}
+    }
+  };
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startResize(e.screenY || e.clientY, e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!isDraggingResize) return;
+    e.preventDefault();
+    e.stopPropagation();
+    updateResize(e.screenY || e.clientY);
+  });
+
+  handle.addEventListener('pointerup', (e) => {
+    endResize(e.pointerId);
+  });
+
+  handle.addEventListener('pointercancel', (e) => {
+    endResize(e.pointerId);
+  });
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startResize(e.screenY || e.clientY);
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!isDraggingResize) return;
+    updateResize(e.screenY || e.clientY);
+  }, { capture: true });
+
+  window.addEventListener('pointerup', (e) => {
+    if (!isDraggingResize) return;
+    endResize(e.pointerId);
+  }, { capture: true });
+
+  window.addEventListener('pointercancel', (e) => {
+    if (!isDraggingResize) return;
+    endResize(e.pointerId);
+  }, { capture: true });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDraggingResize) return;
+    updateResize(e.screenY || e.clientY);
+  }, { capture: true });
+
+  window.addEventListener('mouseup', () => {
+    endResize();
+  }, { capture: true });
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initToolbarDragging);
+  document.addEventListener('DOMContentLoaded', () => {
+    initToolbarDragging();
+    initQuickAnswerResizeBottom();
+  });
 } else {
   initToolbarDragging();
+  initQuickAnswerResizeBottom();
 }
 
 // Dismiss toolbar when double-clicking outside the pill or answer card
@@ -1277,8 +1850,11 @@ document.addEventListener('mousedown', (e) => {
   const tb = document.getElementById('quickTextToolbar');
   const card = document.getElementById('quickAnswerCard');
 
-  // If answer card is actively displaying, NEVER close window on outside clicks!
-  // User can read, reference, and copy answer without accidental dismissal.
+  // If answer card is pinned or actively displaying, NEVER close window on outside clicks!
+  // User can freely read, reference, and copy answer without accidental dismissal.
+  if (isAnswerCardPinned) {
+    return;
+  }
   if (card && card.style.display !== 'none' && card.style.display !== '') {
     return;
   }
@@ -1299,4 +1875,5 @@ document.addEventListener('mousedown', (e) => {
     lastToolbarOutsideClickTime = 0;
   }
 });
+
 

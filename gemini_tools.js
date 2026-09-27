@@ -592,7 +592,7 @@ async function downloadFileSearchMedia({ apiKey, mediaId }) {
  */
 async function runGeminiInteraction({
   apiKey,
-  modelId = 'gemini-3.8-flash',
+  modelId = 'gemini-3-flash-preview',
   input,
   tools = [],
   toolsOptions = {},

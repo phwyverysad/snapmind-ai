@@ -11,6 +11,14 @@ if (typeof marked !== 'undefined') {
 // === MAIN FLAGSHIP AI MODELS ===
 const AI_MODELS = [
   {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash',
+    tag: 'Turbo',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลความเร็วสูงพิเศษระดับเสี้ยววินาที ตอบไว แม่นยำ และเร็วที่สุด'
+  },
+  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',
     tag: 'Flash',
@@ -35,21 +43,31 @@ const AI_MODELS = [
     desc: 'โมเดลคิดวิเคราะห์เชิงลึกขั้นสูง (แนะนำ: เปิด Thinking สำหรับโจทย์ซับซ้อน)'
   },
   {
-    id: 'gemini-3-flash-preview',
-    name: 'Gemini 3 Flash',
-    tag: 'Turbo',
-    tagClass: 'flash',
+    id: 'deepseek-flash',
+    name: 'DeepSeek Flash',
+    tag: 'DeepSeek',
+    tagClass: 'deepseek',
     defaultThinking: false,
-    desc: 'โมเดลความเร็วสูงพิเศษระดับเสี้ยววินาที ตอบไว แม่นยำ และเร็วที่สุด'
+    desc: 'โมเดล DeepSeek-V4.1-Flash เร็วพิเศษ รองรับภาพและ Vision (ปิด Thinking ตอบทันที)'
+  },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    tag: 'Reasoner',
+    tagClass: 'pro',
+    defaultThinking: true,
+    desc: 'โมเดลคิดวิเคราะห์เชิงลึก DeepSeek-V4-Pro เหมาะสำหรับโค้ดและตรรกะซับซ้อน'
   }
 ];
 
-// Map UI Model IDs to active Google AI Studio API endpoints
+// Map UI Model IDs to active Google AI Studio / DeepSeek API endpoints
 const MODEL_API_ENDPOINT_MAP = {
   'gemini-3-flash-preview': 'gemini-3-flash-preview',
   'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
-  'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
+  'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview',
+  'deepseek-flash': 'deepseek-flash',
+  'deepseek-v4-pro': 'deepseek-v4-pro'
 };
 
 // Preset SVG Icons for Quick Text Ask Actions (Feather/Lucide 2px stroke, strictly NO EMOJIS)
@@ -205,19 +223,23 @@ const chatInput = document.getElementById('chatInput');
 // State Variables
 let appSettings = {
   apiKey: '',
+  deepseekApiKey: '',
   shortcutKey: 'Alt+Shift+S',
   quickTextShortcutKey: 'Ctrl+CapsLock',
-  defaultModel: 'gemini-3.8-flash',
+  defaultModel: 'gemini-3-flash-preview',
   modelThinking: {
+    'gemini-3-flash-preview': false,
     'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
-    'gemini-3.1-pro-preview': true
+    'gemini-3.1-pro-preview': true,
+    'deepseek-flash': false,
+    'deepseek-v4-pro': true
   },
   textPrompts: []
 };
 
-let currentSelectedModel = 'gemini-3.8-flash';
-let selectedModalModelId = 'gemini-3.8-flash';
+let currentSelectedModel = 'gemini-3-flash-preview';
+let selectedModalModelId = 'gemini-3-flash-preview';
 
 // Quick Text Ask State
 let currentCapturedText = '';
@@ -334,7 +356,7 @@ async function reanalyzeWithNewModel() {
   if (!finalImg) return;
 
   const streamStartTime = performance.now();
-  const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
+  const selectedModel = currentSelectedModel || 'gemini-3-flash-preview';
   let hasAnswerCompleted = false;
 
   window.electronAPI.onStreamChunk((data) => {
@@ -484,7 +506,7 @@ function setupModalBackdropClose() {
 async function initApp() {
   if (window.electronAPI) {
     appSettings = await window.electronAPI.getSettings();
-    currentSelectedModel = appSettings.defaultModel || 'gemini-3.8-flash';
+    currentSelectedModel = appSettings.defaultModel || 'gemini-3-flash-preview';
     if (Array.isArray(appSettings.textPrompts) && appSettings.textPrompts.length > 0) {
       currentQuickPrompts = [...appSettings.textPrompts];
     }
@@ -699,6 +721,9 @@ function loadFrozenScreenImage(dataUrl) {
 
 // startSnippingUI() {
 function startSnippingUI(payload = null) {
+  if (isSnippingActive && document.body.classList.contains('snipping-active') && box && box.w > 0 && box.h > 0) {
+    return;
+  }
   let bounds = null;
   let freezeDataUrl = null;
 
@@ -735,7 +760,15 @@ function startSnippingUI(payload = null) {
   stopLaserScan();
   stopSpeechSynthesis();
   isSnippingActive = true;
+  isDrawing = false;
+  isMoving = false;
+  isResizing = false;
+  activeHandle = null;
   box = { x: 0, y: 0, w: 0, h: 0 };
+  hideSmartScreenToolbar(false);
+  if (ctx && canvas) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
   const aiWin = document.getElementById('aiWindow');
   if (aiWin) {
     aiWin.style.display = 'none';
@@ -759,6 +792,12 @@ function startSnippingUI(payload = null) {
   if (quickCont) {
     quickCont.style.display = 'none';
   }
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'none';
+  }
+  isScreenPromptExecuting = false;
+  lastScreenExecutionParams = null;
 
   canvas.style.display = 'block';
   canvas.style.backgroundImage = 'none';
@@ -775,6 +814,10 @@ function startSnippingUI(payload = null) {
 }
 
 function cancelSnippingUI(fromMain = false) {
+  if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
+    window.electronAPI.cancelAiGeneration();
+  }
+  isScreenPromptExecuting = false;
   document.body.classList.remove('toolbar-visible');
   document.body.classList.remove('snipping-active');
   stopLaserScan();
@@ -784,11 +827,12 @@ function cancelSnippingUI(fromMain = false) {
   box = { x: 0, y: 0, w: 0, h: 0 };
   if (canvas) {
     canvas.style.backgroundImage = 'none';
+    canvas.style.display = 'none';
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   if (!isSnippingActive && !isLaserScanning) {
     hideSmartScreenToolbar(false);
-    canvas.style.display = 'none';
     if (topHint) topHint.style.display = 'none';
     if (percentBadge) percentBadge.style.display = 'none';
     return;
@@ -801,12 +845,11 @@ function cancelSnippingUI(fromMain = false) {
   isResizing = false;
   activeHandle = null;
   box = { x: 0, y: 0, w: 0, h: 0 };
-  canvas.style.display = 'none';
   currentAppliedCursor = null;
   setCanvasCursor('default');
   if (topHint) topHint.style.display = 'none';
   if (percentBadge) percentBadge.style.display = 'none';
-  drawScene();
+  if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (window.electronAPI && !fromMain) {
     const settingsModal = document.getElementById('settingsModal');
@@ -895,7 +938,17 @@ function isCustomQuestionKeyEvent(e) {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key === 'Esc') {
     e.preventDefault();
+    const quickCont = document.getElementById('quickTextContainer');
+    const answerCard = document.getElementById('quickAnswerCard');
+    const isQuickOpen = (quickCont && (quickCont.style.display === 'flex' || quickCont.style.display === 'block')) ||
+                        (answerCard && (answerCard.style.display === 'flex' || answerCard.style.display === 'block'));
     if (isSnippingActive) {
+      cancelSnippingUI();
+      return;
+    }
+    const hasActiveSelection = box && (box.w > 0 || box.h > 0);
+    if (isSnippingActive || isQuickOpen || hasActiveSelection) {
+      if (typeof closeQuickAnswerCard === 'function') closeQuickAnswerCard();
       cancelSnippingUI();
       return;
     }
@@ -915,7 +968,9 @@ window.addEventListener('keydown', (e) => {
   }
 
   // Category hotkeys (1-8 and ?) when selection area is active (Standard Digits, Numpad, and Thai layout)
-  if (isSnippingActive && box && box.w >= 10 && box.h >= 10) {
+  const answerCardEl = document.getElementById('quickAnswerCard');
+  const isAnswerOpen = answerCardEl && (answerCardEl.style.display === 'flex' || answerCardEl.style.display === 'block');
+  if ((isSnippingActive || isAnswerOpen) && box && box.w >= 10 && box.h >= 10) {
     const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
     if (tag !== 'input' && tag !== 'textarea') {
       const digit = getDigitFromKeyEvent(e);
@@ -1384,6 +1439,10 @@ function sanitizeRogueForeignScripts(text, allowForeign = false) {
   if (!text || typeof text !== 'string') return '';
   if (allowForeign) return text;
   let clean = text.replace(ROGUE_FOREIGN_SCRIPT_REGEX, '');
+  clean = clean.replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '');
+  clean = clean.replace(/<<<|>>>/g, '');
+  clean = clean.replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '');
+  clean = clean.replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '');
   clean = clean.replace(/เพื่อย(?=การ)/g, 'เพื่อ');
   clean = clean.replace(/[ \t]{2,}/g, ' ');
   return clean;
@@ -1478,11 +1537,13 @@ function triggerAutoTranslation(sourceText) {
   }
   if (window.electronAPI && window.electronAPI.quickTextAsk) {
     window.electronAPI.quickTextAsk({
-      promptText: `คุณคือนักแปลภาษาระดับมืออาชีพ จงแปลข้อความต่อไปนี้เป็นภาษาไทยโดยตรงเท่านั้น แปลตรงตัวตามต้นฉบับประโยคต่อประโยค ย่อหน้าต่อย่อหน้า ครบถ้วนทุกประโยค แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามนำข้อความภาษาอังกฤษหรือภาษาต้นฉบับมาแสดงซ้ำเด็ดขาด ห้ามแต่งเติมหัวข้อใหม่ พร้อมรักษารูปแบบและองค์ประกอบ (Layout & Spatial Composition) ให้ตรงตามต้นฉบับ เช่น การขึ้นบรรทัดใหม่ การเว้นวรรค หัวข้อ รายการข้อ (Bullet points) และตาราง Markdown เพื่อให้อ่านง่าย สบายตา ห้ามสรุป ห้ามอธิบาย และห้ามตัดทอนข้อความใดๆ (หากต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษ):\n\n${cleanSource}`
+      promptId: 'translate_th',
+      categoryName: 'แปลภาษา',
+      promptText: `แปลข้อความต่อไปนี้อย่างถูกต้อง สละสลวย และเป็นธรรมชาติ Literal & Verbatim Translation แปลตรงตัวตามต้นฉบับ 100% ครบถ้วนทุกประโยคและย่อหน้า คงรูปแบบและโครงสร้างเดิม (Layout & Spatial Composition) เช่น การขึ้นบรรทัดใหม่ ย่อหน้า รายการข้อ (Bullet points) และตาราง Markdown (หากข้อความต้นฉบับเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามมีข้อความภาษาอังกฤษก่อนหน้าคำแปลเด็ดขาด; หากข้อความต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษที่ถูกต้อง ชัดเจน และเป็นธรรมชาติ) ห้ามตอบคำถามเด็ดขาด ห้ามแก้ปัญหา ห้ามสรุป แสดงเฉพาะคำแปลเท่านั้น:\n\n${cleanSource}`
     }).then(res => {
       if (res && res.fullText && res.fullText.trim()) {
         const cleanTr = sanitizeRogueForeignScripts(res.fullText.trim());
-        if (cleanTr && /[\u0E00-\u0E7F]/.test(cleanTr)) {
+        if (cleanTr) {
           currentAnalysisResult.translate = cleanTr;
         }
       }
@@ -1519,6 +1580,9 @@ function triggerAutoOcr() {
     }).then(res => {
       if (res && res.text) {
         currentAnalysisResult.ocr = res.text.trim();
+        if (activeCategory === 'translate' && (!currentAnalysisResult.translate || !currentAnalysisResult.translate.trim()) && !isTranslatingOcr) {
+          triggerAutoTranslation(currentAnalysisResult.ocr);
+        }
       }
     }).catch(err => {
       console.warn('Auto OCR error:', err);
@@ -1563,11 +1627,15 @@ function triggerAutoExplain() {
 
 function cleanThaiTranslation(raw) {
   if (!raw) return '';
-  const text = raw.trim();
+  let text = raw.trim();
+  text = text.replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '');
+  text = text.replace(/<<<|>>>/g, '');
+  text = text.replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/i, '');
+  text = text.replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/i, '');
+  text = text.trim();
 
-  // If text does not contain Thai, return empty string so untranslated raw foreign text is never displayed as Thai translation
   const hasThai = /[\u0E00-\u0E7F]/.test(text);
-  if (!hasThai) return '';
+  if (!hasThai) return text;
 
   // 1. Check if text is divided by horizontal rule or markdown line dividers
   const hrParts = text.split(/\n\s*[-*_]{3,}\s*\n/);
@@ -1672,18 +1740,20 @@ function getCategoryContent(cat, result) {
         const cleaned = cleanThaiTranslation(tr);
         if (cleaned) return cleaned;
       }
-      if (!isStreamingActive && ans) return ans;
       if (typeof isTranslatingOcr !== 'undefined' && isTranslatingOcr) {
-        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความเป็นภาษาไทย...</div>`;
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความ...</div>`;
       }
       if (isStreamingActive) {
         return '';
       }
-      // If stream finished and translation is empty or not Thai, check if source has foreign characters
-      const foreignSource = (ocrText || ans || '').trim();
-      if (/[A-Za-z]/.test(foreignSource) && foreignSource.length > 5) {
-        setTimeout(() => triggerAutoTranslation(foreignSource), 10);
-        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความเป็นภาษาไทย...</div>`;
+      // If stream finished and translation is empty, check if source text or OCR is available
+      const sourceToTranslate = (ocrText || (currentAnalysisResult && currentAnalysisResult.ocr) || '').trim();
+      if (sourceToTranslate && sourceToTranslate.length > 2 && sourceToTranslate !== '(ไม่มีข้อความในภาพ)' && !sourceToTranslate.includes('ไม่พบข้อความตัวอักษร')) {
+        setTimeout(() => triggerAutoTranslation(sourceToTranslate), 10);
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังแปลข้อความ...</div>`;
+      }
+      if (typeof isFetchingOcr !== 'undefined' && isFetchingOcr) {
+        return `<div style="padding: 16px; color: #0284c7; display: flex; align-items: center; gap: 8px; font-size: 13px;"><svg style="animation: spin 1s linear infinite;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>กำลังรอถอดข้อความเพื่อแปลภาษา...</div>`;
       }
       return '_*(ไม่มีข้อความสำหรับแปลภาษา)*_';
 
@@ -2050,7 +2120,7 @@ async function legacyProcessScreenCapture(cropBox) {
     });
 
     // 5. Zero-Bounce Unified Screen Streaming Pipeline
-    const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
+    const selectedModel = currentSelectedModel || 'gemini-3-flash-preview';
     if (window.electronAPI && window.electronAPI.cropAndAnalyzeScreenStream) {
       const res = await window.electronAPI.cropAndAnalyzeScreenStream({ rect: cropBox, modelId: selectedModel });
       if (res && res.croppedDataUrl) {
@@ -2166,13 +2236,15 @@ function switchCategory(cat, btnEl) {
   buttons.forEach(btn => btn.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
 
-  // If user switches to 'translate' tab and translation is not yet available or not Thai,
-  // automatically translate the foreign text into Thai on-the-fly!
+  // If user switches to 'translate' tab and translation is not yet available,
+  // automatically translate on-the-fly!
   if (cat === 'translate') {
-    const hasThai = currentAnalysisResult && currentAnalysisResult.translate && /[\u0E00-\u0E7F]/.test(currentAnalysisResult.translate);
-    const sourceText = currentAnalysisResult ? (currentAnalysisResult.ocr || currentAnalysisResult.answer || '').trim() : '';
-    if (!hasThai && /[A-Za-z]/.test(sourceText) && sourceText.length > 5 && !isTranslatingOcr && !isStreamingActive) {
+    const hasTranslation = currentAnalysisResult && currentAnalysisResult.translate && currentAnalysisResult.translate.trim().length > 0;
+    const sourceText = currentAnalysisResult ? (currentAnalysisResult.ocr || '').trim() : '';
+    if (!hasTranslation && sourceText && sourceText.length > 2 && sourceText !== '(ไม่มีข้อความในภาพ)' && !sourceText.includes('ไม่พบข้อความตัวอักษร') && !isTranslatingOcr && !isStreamingActive) {
       triggerAutoTranslation(sourceText);
+    } else if (!hasTranslation && !sourceText && !isFetchingOcr && !isStreamingActive && currentCroppedBase64) {
+      triggerAutoOcr();
     }
   }
 
@@ -2604,7 +2676,7 @@ async function sendUserMessage() {
   if (latencyText) latencyText.innerText = "กำลังประมวลผลคำถามเพิ่มเติม...";
 
   try {
-    const modelId = currentSelectedModel || 'gemini-3.8-flash';
+    const modelId = currentSelectedModel || 'gemini-3-flash-preview';
     const result = await window.electronAPI.sendChatMessage(query, modelId, currentAnalysisResult, followUpChatMessages);
 
     metricsBanner.classList.remove('thinking');
@@ -2790,6 +2862,45 @@ function openSettingsModal() {
     };
   }
 
+  const deepseekApiKeyInput = document.getElementById('deepseekApiKeyInput');
+  if (deepseekApiKeyInput) {
+    deepseekApiKeyInput.value = appSettings.deepseekApiKey || '';
+    deepseekApiKeyInput.type = 'password';
+
+    const dsWarningEl = document.getElementById('deepseekApiKeyWarningMsg');
+    const updateDsKeyWarning = () => {
+      const val = deepseekApiKeyInput.value.trim();
+      if (val && /[^\x20-\x7E]/.test(val)) {
+        if (dsWarningEl) {
+          dsWarningEl.style.display = 'block';
+          dsWarningEl.innerText = '[!] ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ ซึ่งไม่ใช่ DeepSeek API Key (API Key ที่ถูกต้องจะขึ้นต้นด้วย sk-...)';
+        }
+      } else {
+        if (dsWarningEl) dsWarningEl.style.display = 'none';
+      }
+    };
+    deepseekApiKeyInput.oninput = updateDsKeyWarning;
+    updateDsKeyWarning();
+  }
+
+  const toggleDsBtn = document.getElementById('toggleDeepseekApiKeyVisibility');
+  if (toggleDsBtn && deepseekApiKeyInput) {
+    const dsEyeOpen = document.getElementById('deepseekEyeIconOpen');
+    const dsEyeClosed = document.getElementById('deepseekEyeIconClosed');
+    toggleDsBtn.onclick = (e) => {
+      e.preventDefault();
+      if (deepseekApiKeyInput.type === 'password') {
+        deepseekApiKeyInput.type = 'text';
+        if (dsEyeOpen) dsEyeOpen.style.display = 'none';
+        if (dsEyeClosed) dsEyeClosed.style.display = 'block';
+      } else {
+        deepseekApiKeyInput.type = 'password';
+        if (dsEyeOpen) dsEyeOpen.style.display = 'block';
+        if (dsEyeClosed) dsEyeClosed.style.display = 'none';
+      }
+    };
+  }
+
   if (shortcutInput) shortcutInput.value = appSettings.shortcutKey || 'Alt+Shift+S';
   if (quickShortcutInput) quickShortcutInput.value = appSettings.quickTextShortcutKey || 'Ctrl+CapsLock';
 
@@ -2838,12 +2949,18 @@ function renderThinkingModelSettings() {
   container.innerHTML = '';
 
   const currentThinking = appSettings.modelThinking || {
+    'gemini-3-flash-preview': false,
     'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
-    'gemini-3.1-pro-preview': true
+    'gemini-3.1-pro-preview': true,
+    'deepseek-flash': false,
+    'deepseek-v4-pro': true
   };
 
-  const coreModels = AI_MODELS.filter(m => ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'].includes(m.id));
+  const thinkingKeys = appSettings.modelThinking ? Object.keys(appSettings.modelThinking) : null;
+  const coreModels = thinkingKeys && thinkingKeys.length <= 4
+    ? AI_MODELS.filter(m => thinkingKeys.includes(m.id))
+    : AI_MODELS.filter(m => ['gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview', 'deepseek-flash', 'deepseek-v4-pro'].includes(m.id));
   coreModels.forEach(model => {
     const isEnabled = currentThinking[model.id] !== undefined
       ? Boolean(currentThinking[model.id])
@@ -2891,8 +3008,16 @@ function closeSettingsModal() {
     modal.style.visibility = 'hidden';
     modal.style.opacity = '0';
   }
-  if (aiWindow.style.display !== 'flex' && window.electronAPI) {
-    window.electronAPI.hideWindow();
+  if (canvas && ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  box = { x: 0, y: 0, w: 0, h: 0 };
+  const answerCard = document.getElementById('quickAnswerCard');
+  const isAnswerVisible = answerCard && answerCard.style.display === 'flex';
+  if (!isAnswerVisible && aiWindow && aiWindow.style.display !== 'flex' && window.electronAPI) {
+    requestAnimationFrame(() => {
+      window.electronAPI.hideWindow();
+    });
   }
 }
 
@@ -2952,8 +3077,17 @@ async function saveSettingsFromModal() {
     return;
   }
 
+  const deepseekApiKeyInput = document.getElementById('deepseekApiKeyInput');
+  const rawDeepseekApiKey = deepseekApiKeyInput ? deepseekApiKeyInput.value.trim() : (appSettings.deepseekApiKey || '');
+  if (rawDeepseekApiKey && /[^\x20-\x7E]/.test(rawDeepseekApiKey)) {
+    alert('API Key ไม่ถูกต้อง: ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ\n\nDeepSeek API Key ต้องเป็นภาษาอังกฤษและตัวเลข (เช่น sk-...)\nกรุณาตรวจสอบและคัดลอกใหม่จาก https://platform.deepseek.com');
+    if (deepseekApiKeyInput) deepseekApiKeyInput.focus();
+    return;
+  }
+
   const newSettings = {
     apiKey: rawApiKey,
+    deepseekApiKey: rawDeepseekApiKey,
     shortcutKey: shortcutVal,
     quickTextShortcutKey: quickShortcutVal,
     autoLaunch: autoLaunchVal,
@@ -2987,6 +3121,11 @@ async function openHistoryModal() {
     aiWindow.style.visibility = 'hidden';
     aiWindow.style.opacity = '0';
   }
+  const quickCont = document.getElementById('quickTextContainer');
+  if (quickCont) quickCont.style.display = 'none';
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) answerCard.style.display = 'none';
+
   if (window.electronAPI) {
     window.electronAPI.setIgnoreMouseEvents(false);
     if (window.electronAPI.showWindow) window.electronAPI.showWindow();
@@ -2999,18 +3138,45 @@ async function openHistoryModal() {
   historyList.innerHTML = '';
 
   if (cachedHistoryItems.length === 0) {
-    historyList.innerHTML = `<div style="text-align:center; padding:20px; color:#64748b;">ไม่มีประวัติการสแกน</div>`;
+    historyList.innerHTML = `<div style="text-align:center; padding:28px 20px; color:#64748b; font-size:13px;">ยังไม่มีประวัติการถาม-ตอบ</div>`;
   } else {
     cachedHistoryItems.forEach(item => {
       const div = document.createElement('div');
       div.className = 'history-item';
       div.setAttribute('onclick', `loadHistoryItem('${item.id}')`);
-      const itemTitle = item.result?.ocr?.trim()?.substring(0, 50) || item.result?.answer?.trim()?.substring(0, 50) || 'ประวัติการสแกนภาพ';
+
+      const catBadge = escapeHtml(item.category || 'คำตอบ');
+      const cleanQuestion = (item.question || '')
+        .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+        .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+        .replace(/<<<|>>>/g, '')
+        .replace(/<<>>/g, '')
+        .replace(/<{2,}/g, '')
+        .replace(/>{2,}/g, '')
+        .trim();
+      const cleanFullText = (item.fullText || item.result?.answer || (item.result && (item.result.answer || item.result.ocr)) || '')
+        .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+        .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+        .replace(/<<<|>>>/g, '')
+        .replace(/<<>>/g, '')
+        .replace(/<{2,}/g, '')
+        .replace(/>{2,}/g, '')
+        .replace(/[*#`_]/g, '')
+        .trim();
+      const questionSnippet = cleanQuestion ? cleanQuestion.replace(/\s+/g, ' ').substring(0, 75) : '';
+      const answerSnippet = cleanFullText ? cleanFullText.replace(/\s+/g, ' ').substring(0, 100) : '';
+      const rawTitle = questionSnippet || answerSnippet || 'ประวัติการถาม AI';
+      const displayTitle = escapeHtml(rawTitle);
+      const meta = escapeHtml(`${item.model || 'Gemini'} • ${item.timestamp || ''}${item.durationSec ? ' • ' + item.durationSec + 's' : ''}`);
+
       div.innerHTML = `
-        <img class="history-thumb" src="${item.thumbnail}">
+        ${item.thumbnail ? `<img class="history-thumb" src="${item.thumbnail}" alt="Thumbnail">` : `<div class="history-thumb-placeholder"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`}
         <div class="history-info">
-          <div class="history-title">${itemTitle}...</div>
-          <div class="history-meta">${item.model} • ${item.timestamp} • ${item.latency || ''}</div>
+          <div class="history-header-line" style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <span class="quick-action-badge" style="font-size:11px; padding:2px 8px;">${catBadge}</span>
+            <span class="history-meta">${meta}</span>
+          </div>
+          <div class="history-title">${displayTitle}${rawTitle.length >= 75 ? '...' : ''}</div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); loadHistoryItem('${item.id}')">ดูคำตอบ</button>
       `;
@@ -3026,14 +3192,26 @@ async function openHistoryModal() {
 }
 
 function closeHistoryModal() {
+  const isOpeningItem = arguments[0] === true;
   const modal = document.getElementById('historyModal');
   if (modal) {
     modal.style.display = 'none';
     modal.style.visibility = 'hidden';
     modal.style.opacity = '0';
   }
-  if (aiWindow.style.display !== 'flex' && window.electronAPI) {
-    window.electronAPI.hideWindow();
+  if (canvas && ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  box = { x: 0, y: 0, w: 0, h: 0 };
+  const answerCard = document.getElementById('quickAnswerCard');
+  const isAnswerVisible = answerCard && answerCard.style.display === 'flex';
+  if (!isOpeningItem && window.electronAPI && window.electronAPI.notifyHistoryModalClosed) {
+    window.electronAPI.notifyHistoryModalClosed();
+  }
+  if (!isOpeningItem && !isAnswerVisible && aiWindow && aiWindow.style.display !== 'flex' && window.electronAPI) {
+    requestAnimationFrame(() => {
+      window.electronAPI.hideWindow();
+    });
   }
 }
 
@@ -3041,71 +3219,96 @@ function loadHistoryItem(id) {
   if (isSnippingActive) cancelSnippingUI(true);
   if (canvas) canvas.style.display = 'none';
   if (topHint) topHint.style.display = 'none';
-  if (percentBadge) percentBadge.style.display = 'none';
-
   const found = cachedHistoryItems.find(h => String(h.id) === String(id));
   if (!found) {
     console.warn('[History] Item not found for id:', id);
     return;
   }
 
-  stopSpeechSynthesis();
-  isStreamingActive = false;
-  hasReceivedFirstToken = true;
-  metricsBanner.classList.remove('thinking');
-
-  currentAnalysisResult = found.result || {
-    answer: '',
-    explain: '',
-    summary: '',
-    translate: '',
-    ocr: ''
-  };
-
-  currentDisplayModelName = found.model || selectedModelNameText();
-  followUpChatMessages = [];
-
-  // 1. Close history modal directly without hiding Electron main window
   const modal = document.getElementById('historyModal');
   if (modal) modal.style.display = 'none';
-
-  // 2. Ensure main window is shown and focused
-  if (window.electronAPI && window.electronAPI.showWindow) {
-    window.electronAPI.showWindow();
-  }
-
-  // 3. Immediately display AI Answer window in center
-  showAiWindowPosition({ x: 0, y: 0, w: 0, h: 0 });
-
-  // 4. Ensure window is immediately interactive
   if (window.electronAPI) {
-    window.electronAPI.setIgnoreMouseEvents(false);
+    if (window.electronAPI.showWindow) window.electronAPI.showWindow();
+    if (window.electronAPI.setIgnoreMouseEvents) window.electronAPI.setIgnoreMouseEvents(false);
   }
-
-  // 5. Update latency bar with history info
-  if (latencyText) {
-    latencyText.innerText = `ประวัติการสแกน (${found.latency || 'N/A'}) • ${found.timestamp || ''}`;
-  }
-
-  // 6. Update thinking accordion
-  if (thinkingContent && thinkingAccordion) {
-    if (found.result?.thinking_process && found.result.thinking_process.trim()) {
-      thinkingContent.innerText = found.result.thinking_process;
-      thinkingAccordion.style.display = 'block';
-    } else {
-      thinkingAccordion.style.display = 'none';
-    }
-  }
-
-  // 7. Reset active tab to 'answer' and highlight button
+  isStreamingActive = false;
+  hasReceivedFirstToken = true;
+  const metricsBanner = document.getElementById('metricsBanner');
+  if (metricsBanner) metricsBanner.classList.remove('thinking');
   activeCategory = 'answer';
-  const tabButtons = document.querySelectorAll('.tab-btn');
-  tabButtons.forEach(btn => btn.classList.remove('active'));
-  const firstTab = document.querySelector('.tab-btn');
-  if (firstTab) firstTab.classList.add('active');
+  if (typeof renderConversationView === 'function') renderConversationView();
+  if (typeof showAiWindowPosition === 'function') showAiWindowPosition();
 
-  // 8. Instantly render conversation view
-  renderConversationView();
+  if (window.electronAPI && window.electronAPI.forwardHistoryToToolbar) {
+    window.electronAPI.forwardHistoryToToolbar(found);
+  }
+
+  // 1. Close history modal cleanly WITHOUT triggering hideWindow()
+  closeHistoryModal(true);
+
+  // 2. Hide and clear canvas completely so no dark dimming overlay
+  if (canvas) {
+    canvas.style.display = 'none';
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  isSnippingActive = false;
+  document.body.classList.remove('snipping-active');
+
+  // 3. Open directly in the NEW Answer Card format!
+  showQuickAnswerState(found.category || 'คำตอบ');
+
+  // 4. Update status text with history metadata
+  const statusEl = document.getElementById('quickAnswerStatus');
+  if (statusEl) {
+    const sec = found.durationSec ? ` (${found.durationSec}s)` : '';
+    statusEl.innerText = `ประวัติ${sec} • ${found.timestamp || ''}`;
+  }
+
+  // 5. Update custom model dropdown label
+  if (typeof updateCustomModelDropdownUI === 'function' && found.modelId) {
+    updateCustomModelDropdownUI(found.modelId);
+  }
+
+  // 6. Render markdown content in new answer card
+  const contentToRender = found.fullText || (found.result && (found.result.answer || found.result.ocr)) || 'ไม่มีเนื้อหา';
+  quickAnswerStreamText = contentToRender;
+  renderQuickAnswerContent(contentToRender);
+
+  // 7. Auto pin the history answer card so it stays on screen without vanishing
+  isAnswerCardPinned = true;
+  const pinBtn = document.getElementById('quickPinBtn');
+  if (pinBtn) pinBtn.classList.add('pinned');
+  const pinLabel = document.getElementById('quickPinLabel');
+  if (pinLabel) pinLabel.innerText = "ปลดหมุด";
+  if (window.electronAPI && window.electronAPI.setQuickAnswerPinned) {
+    window.electronAPI.setQuickAnswerPinned(true);
+  }
+
+  // 8. Ensure answer card and container are visible and interactive
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'flex';
+  }
+
+  const container = document.getElementById('quickTextContainer');
+  if (container) {
+    container.style.display = 'flex';
+    container.style.opacity = '1';
+    container.style.pointerEvents = 'auto';
+    // Position cleanly in center view
+    const top = Math.max(70, Math.round((window.innerHeight - 450) / 2));
+    const left = Math.max(40, Math.round((window.innerWidth - 880) / 2));
+    container.style.top = `${top}px`;
+    container.style.left = `${left}px`;
+    container.style.transform = 'none';
+    container.style.width = '880px';
+    container.style.maxWidth = '92vw';
+  }
+
+  if (window.electronAPI) {
+    if (window.electronAPI.showWindow) window.electronAPI.showWindow();
+    if (window.electronAPI.setIgnoreMouseEvents) window.electronAPI.setIgnoreMouseEvents(false);
+  }
 }
 
 async function clearHistoryAll() {
@@ -3215,9 +3418,21 @@ function setupMousePassthroughListeners() {
       const isHistoryOpen = historyModal && historyModal.style.display === 'flex';
       const isPromptOpen = promptModal && promptModal.style.display === 'flex';
       const isQuickOpen = quickCont && quickCont.style.display === 'flex';
+      const answerCard = document.getElementById('quickAnswerCard');
+      const isAnswerOpen = answerCard && answerCard.style.display === 'flex';
 
-      // Never ignore mouse events if a modal dialog or floating toolbar is open
-      if (!isSettingsOpen && !isHistoryOpen && !isPromptOpen && !isQuickOpen) {
+      // Keep mouse events active if a modal dialog is open
+      if (isSettingsOpen || isHistoryOpen || isPromptOpen) {
+        return;
+      }
+
+      // If pinned or answer card is active, forward mouse events to background windows so user can click other programs seamlessly!
+      if (isAnswerCardPinned || isAnswerOpen) {
+        window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+        return;
+      }
+
+      if (!isQuickOpen) {
         window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
       }
     });
@@ -3243,9 +3458,11 @@ function setupQuickTextKeyboardListener() {
       }
       const answerCard = document.getElementById('quickAnswerCard');
       if (answerCard && answerCard.style.display === 'flex') {
-        answerCard.style.display = 'none';
         if (isSnippingActive && box && box.w >= 10) {
+          answerCard.style.display = 'none';
           updateSmartScreenToolbarPosition(box);
+        } else {
+          closeQuickAnswerCard();
         }
         return;
       }
@@ -3258,9 +3475,7 @@ function setupQuickTextKeyboardListener() {
       if (e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const digitIndex = parseInt(e.key, 10) - 1;
-        if (isSnippingActive) {
-          executeScreenPromptByIndex(digitIndex);
-        } else {
+        if (!isSnippingActive) {
           executeQuickPromptByIndex(digitIndex);
         }
         return;
@@ -3354,6 +3569,12 @@ function handleCloseQuickTextUI() {
   if (container) {
     container.style.display = 'none';
   }
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'none';
+  }
+  isScreenPromptExecuting = false;
+  lastScreenExecutionParams = null;
 }
 
 function closeQuickTextUI() {
@@ -3483,6 +3704,16 @@ function executeQuickPromptByIndex(index) {
 
 function showQuickAnswerState(actionName) {
   stopQuickSpeak();
+  // Clear and hide snipping canvas completely to eliminate dark screen overlay
+  if (canvas) {
+    canvas.style.display = 'none';
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  isSnippingActive = false;
+  document.body.classList.remove('snipping-active');
+  if (topHint) topHint.style.display = 'none';
+  if (percentBadge) percentBadge.style.display = 'none';
+
   const answerCard = document.getElementById('quickAnswerCard');
   const actionBadge = document.getElementById('quickAnswerActionBadge');
   const status = document.getElementById('quickAnswerStatus');
@@ -3586,7 +3817,21 @@ function renderQuickAnswerContent(text) {
   const body = document.getElementById('quickAnswerBody');
   if (!body) return;
 
-  const raw = text || '';
+  let raw = text || '';
+  raw = raw.replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/i, '');
+  raw = raw.replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/i, '');
+  raw = raw
+    .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+    .replace(/<+TARGET_TEXT[^>]*>+/gi, '')
+    .replace(/<<<|>>>/g, '')
+    .replace(/<<>>/g, '')
+    .replace(/<{2,}\s*>{2,}/g, '')
+    .replace(/<{2,}/g, '')
+    .replace(/>{2,}/g, '');
+  raw = raw
+    .replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '')
+    .replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '');
+
   const trimmed = raw.trim();
   let html = '';
   if (trimmed.startsWith('<div') || trimmed.startsWith('<span') || trimmed.startsWith('<svg')) {
@@ -3612,6 +3857,23 @@ function renderQuickAnswerContent(text) {
         throwOnError: false
       });
     } catch (e) {}
+  }
+
+  // Dynamically auto-expand answer card downwards following content height
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard && !userResizedAnswerHeight) {
+    const cardHeader = answerCard.querySelector('.quick-answer-header');
+    const headerH = (cardHeader && cardHeader.offsetHeight > 0) ? cardHeader.offsetHeight : 42;
+    const bodyH = body ? Math.max(body.scrollHeight, body.offsetHeight, 60) : 60;
+    const resizeBottom = answerCard.querySelector('.quick-answer-resize-bottom');
+    const resizeH = (resizeBottom && resizeBottom.offsetHeight > 0) ? resizeBottom.offsetHeight : 16;
+    const neededH = headerH + bodyH + resizeH + 16;
+    const winH = window.innerHeight || 900;
+    const cardTop = parseInt(answerCard.style.top || '0', 10) || 60;
+    const maxAvailH = Math.max(160, winH - cardTop - 24);
+    const targetH = Math.max(160, Math.min(maxAvailH, neededH));
+    answerCard.style.height = `${targetH}px`;
+    answerCard.style.maxHeight = `${maxAvailH}px`;
   }
 }
 
@@ -3802,8 +4064,8 @@ const SMART_SCREEN_PROMPTS = [
     num: '4',
     name: 'แปลภาษา',
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-    title: 'แปลข้อความในภาพเป็นภาษาไทย [4]',
-    prompt: 'แปลข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพนี้เป็นภาษาไทยตามต้นฉบับอย่างตรงไปตรงมาประโยคต่อประโยคเท่านั้น ห้ามแต่งเติม ห้ามขยายความ ห้ามอธิบายเพิ่มเติม ห้ามตอบคำถาม แสดงเฉพาะคำแปลภาษาไทยของข้อความที่เห็นในภาพเท่านั้น'
+    title: 'แปลข้อความในภาพ [4]',
+    prompt: 'แปลข้อความทั้งหมดที่ปรากฏในภาพนี้อย่างถูกต้อง ตรงตัว สละสลวย และเป็นธรรมชาติ ครบถ้วนทุกประโยคและย่อหน้า (หากต้นฉบับเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย; หากต้นฉบับเป็นภาษาไทยอยู่แล้วให้แปลเป็นภาษาอังกฤษ) ห้ามแต่งเติม ห้ามขยายความ ห้ามอธิบายเพิ่มเติม ห้ามตอบคำถาม ห้ามแสดงข้อความภาษาเดิม ห้ามใส่แท็กหรือสัญลักษณ์ <<>> แสดงเฉพาะคำแปลเท่านั้น'
   },
   {
     id: 'proofread',
@@ -3925,22 +4187,52 @@ function updateSmartScreenToolbarPosition(targetBox) {
   const aboveY = Math.round(targetBox.y - tbHeight - GAP);
 
   let posY;
-  if (belowY + tbHeight <= winH - 12) {
-    posY = belowY;
-  } else if (aboveY >= 12) {
-    posY = aboveY;
+  if (!isAnswerOpen) {
+    if (belowY + tbHeight <= winH - 12) {
+      posY = belowY;
+    } else if (aboveY >= 12) {
+      posY = aboveY;
+    } else {
+      posY = Math.max(12, Math.min(winH - tbHeight - 12, targetBox.y + targetBox.h - tbHeight - 24));
+    }
   } else {
-    posY = Math.max(12, Math.min(winH - tbHeight - 12, targetBox.y + targetBox.h - tbHeight - 24));
+    const cardH = userResizedAnswerHeight || 380;
+    const totalH = tbHeight + 8 + cardH;
+    const spaceBelow = winH - (targetBox.y + targetBox.h + GAP) - 12;
+    const spaceAbove = targetBox.y - GAP - 12;
+
+    if (spaceBelow >= totalH) {
+      posY = targetBox.y + targetBox.h + GAP;
+      const availH = Math.min(cardH, winH - posY - tbHeight - 24);
+      answerCard.style.maxHeight = `${availH}px`;
+      answerCard.style.minHeight = '0px';
+    } else if (spaceAbove >= totalH) {
+      posY = targetBox.y - GAP - totalH;
+      answerCard.style.maxHeight = `${cardH}px`;
+      answerCard.style.minHeight = '0px';
+    } else if (spaceBelow >= spaceAbove) {
+      posY = targetBox.y + targetBox.h + GAP;
+      const availH = Math.max(140, winH - posY - tbHeight - 24);
+      answerCard.style.maxHeight = `${availH}px`;
+      answerCard.style.minHeight = '0px';
+    } else {
+      const availH = Math.max(140, spaceAbove - tbHeight - 8);
+      const computedTotalH = tbHeight + 8 + availH;
+      posY = Math.max(12, targetBox.y - GAP - computedTotalH);
+      answerCard.style.maxHeight = `${availH}px`;
+      answerCard.style.minHeight = '0px';
+    }
+
+    if (userResizedAnswerHeight) {
+      answerCard.style.height = `${userResizedAnswerHeight}px`;
+      answerCard.style.maxHeight = `${userResizedAnswerHeight}px`;
+      answerCard.style.minHeight = `${userResizedAnswerHeight}px`;
+      answerCard.style.flex = '0 0 auto';
+    }
   }
 
   container.style.left = `${posX}px`;
   container.style.top = `${posY}px`;
-
-  // Dynamically set max-height on answer card based on available screen space below posY
-  if (answerCard && isAnswerOpen) {
-    const availH = Math.max(140, winH - posY - tbHeight - 24);
-    answerCard.style.maxHeight = `${availH}px`;
-  }
 }
 
 function showSmartScreenToolbar(targetBox) {
@@ -3966,6 +4258,12 @@ function showSmartScreenToolbar(targetBox) {
   const cancelBtn = document.getElementById('quickCancelBtn');
   if (cancelBtn) cancelBtn.style.display = 'inline-flex';
 
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'none';
+  }
+  isScreenPromptExecuting = false;
+
   container.style.display = 'flex';
   container.style.opacity = '1';
   container.style.pointerEvents = 'auto';
@@ -3986,6 +4284,10 @@ function hideSmartScreenToolbar(temporary = false) {
     container.style.opacity = '0';
     container.style.pointerEvents = 'none';
   } else {
+    isScreenPromptExecuting = false;
+    if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
+      window.electronAPI.cancelAiGeneration();
+    }
     document.body.classList.remove('toolbar-visible');
     container.style.display = 'none';
     const answerCard = document.getElementById('quickAnswerCard');
@@ -3998,13 +4300,169 @@ function hideSmartScreenToolbar(temporary = false) {
   }
 }
 
+let isAnswerCardPinned = false;
+
+function togglePinQuickAnswer() {
+  isAnswerCardPinned = !isAnswerCardPinned;
+  const pinBtn = document.getElementById('quickPinBtn');
+  const pinLabel = document.getElementById('quickPinLabel');
+
+  if (pinBtn) {
+    pinBtn.classList.toggle('pinned', isAnswerCardPinned);
+    pinBtn.title = isAnswerCardPinned ? "ปลดปักหมุด" : "ปักหมุดค้างบนหน้าจอ (Always on Top)";
+  }
+  if (pinLabel) {
+    pinLabel.innerText = isAnswerCardPinned ? "ปลดหมุด" : "ปักหมุด";
+  }
+
+  if (isAnswerCardPinned) {
+    if (canvas) {
+      canvas.style.display = 'none';
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    isSnippingActive = false;
+    document.body.classList.remove('snipping-active');
+    if (window.electronAPI && window.electronAPI.setIgnoreMouseEvents) {
+      window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+    }
+  }
+
+  if (window.electronAPI && window.electronAPI.setQuickAnswerPinned) {
+    window.electronAPI.setQuickAnswerPinned(isAnswerCardPinned);
+  }
+}
+
 function closeQuickAnswerCard() {
   const answerCard = document.getElementById('quickAnswerCard');
   if (answerCard) answerCard.style.display = 'none';
+  if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
+    window.electronAPI.cancelAiGeneration();
+  }
+  isScreenPromptExecuting = false;
+  isAnswerCardPinned = false;
+  userResizedAnswerHeight = null;
+  const pinBtn = document.getElementById('quickPinBtn');
+  if (pinBtn) pinBtn.classList.remove('pinned');
+  const pinLabel = document.getElementById('quickPinLabel');
+  if (pinLabel) pinLabel.innerText = "ปักหมุด";
+  if (window.electronAPI && window.electronAPI.setQuickAnswerPinned) {
+    window.electronAPI.setQuickAnswerPinned(false);
+  }
+
   stopQuickSpeak();
   if (isSnippingActive && box && box.w >= 10) {
     updateSmartScreenToolbarPosition(box);
+  } else {
+    if (canvas && ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.style.display = 'none';
+    }
+    const container = document.getElementById('quickTextContainer');
+    if (container) container.style.display = 'none';
+    if (window.electronAPI) {
+      window.electronAPI.setIgnoreMouseEvents(true, { forward: true });
+      window.electronAPI.hideWindow();
+    }
   }
+}
+
+let userResizedAnswerHeight = null;
+
+function initQuickAnswerResizeBottom() {
+  const handle = document.getElementById('quickAnswerResizeBottom');
+  const card = document.getElementById('quickAnswerCard');
+  if (!handle || !card) return;
+  if (handle.dataset.resizeInitialized === 'true') return;
+  handle.dataset.resizeInitialized = 'true';
+
+  let isDraggingResize = false;
+  let startY = 0;
+  let startH = 0;
+
+  const startResize = (clientY, pointerId = null) => {
+    isDraggingResize = true;
+    startY = clientY;
+    startH = card.getBoundingClientRect().height || 380;
+    document.body.style.cursor = 'ns-resize';
+    if (pointerId !== null && handle.setPointerCapture) {
+      try { handle.setPointerCapture(pointerId); } catch (e) {}
+    }
+  };
+
+  const updateResize = (clientY) => {
+    if (!isDraggingResize) return;
+    const deltaY = clientY - startY;
+    const cardTop = card.getBoundingClientRect().top;
+    const maxAllowed = Math.max(260, window.innerHeight - cardTop - 16);
+    const newH = Math.max(160, Math.min(maxAllowed, Math.round(startH + deltaY)));
+    userResizedAnswerHeight = newH;
+    card.style.height = `${newH}px`;
+    card.style.maxHeight = `${newH}px`;
+    card.style.minHeight = `${newH}px`;
+    card.style.flex = '0 0 auto';
+  };
+
+  const endResize = (pointerId = null) => {
+    if (!isDraggingResize) return;
+    isDraggingResize = false;
+    document.body.style.cursor = '';
+    if (pointerId !== null && handle.releasePointerCapture) {
+      try { handle.releasePointerCapture(pointerId); } catch (e) {}
+    }
+  };
+
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startResize(e.clientY, e.pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (!isDraggingResize) return;
+    e.preventDefault();
+    e.stopPropagation();
+    updateResize(e.clientY);
+  });
+
+  handle.addEventListener('pointerup', (e) => {
+    endResize(e.pointerId);
+  });
+
+  handle.addEventListener('pointercancel', (e) => {
+    endResize(e.pointerId);
+  });
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    startResize(e.clientY);
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!isDraggingResize) return;
+    updateResize(e.clientY);
+  }, { capture: true });
+
+  window.addEventListener('pointerup', (e) => {
+    if (!isDraggingResize) return;
+    endResize(e.pointerId);
+  }, { capture: true });
+
+  window.addEventListener('pointercancel', (e) => {
+    if (!isDraggingResize) return;
+    endResize(e.pointerId);
+  }, { capture: true });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDraggingResize) return;
+    updateResize(e.clientY);
+  }, { capture: true });
+
+  window.addEventListener('mouseup', () => {
+    endResize();
+  }, { capture: true });
 }
 
 function executeScreenPromptByIndex(index) {
@@ -4052,7 +4510,11 @@ const MODEL_DISPLAY_NAMES = {
   'gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
   'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
-  'gemini-3-flash-preview': 'Gemini 3 Flash'
+  'gemini-3-flash-preview': 'Gemini 3 Flash',
+  'deepseek-flash': 'DeepSeek Flash',
+  'deepseek-v4-pro': 'DeepSeek V4 Pro',
+  'deepseek-chat': 'DeepSeek Flash',
+  'deepseek-reasoner': 'DeepSeek V4 Pro'
 };
 
 function getCleanModelName(modelId) {
@@ -4183,6 +4645,7 @@ async function executeScreenPromptWithModel(promptId, customQuestion, croppedBas
     modelSel.value = modelToUse;
   }
 
+  isScreenPromptExecuting = true;
   try {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
@@ -4200,11 +4663,23 @@ async function executeScreenPromptWithModel(promptId, customQuestion, croppedBas
     }
   } catch (err) {
     handleQuickAnswerError({ error: err.message });
+  } finally {
+    isScreenPromptExecuting = false;
   }
 }
 
+let isScreenPromptExecuting = false;
+let lastScreenPromptExecTime = 0;
+
 async function executeScreenPrompt(promptId, customQuestion = null) {
   if (!box || box.w < 10 || box.h < 10) return;
+  const now = Date.now();
+  if (isScreenPromptExecuting || (now - lastScreenPromptExecTime < 150)) {
+    console.log('[Screen Prompt] Debounced duplicate prompt execution');
+    return;
+  }
+  isScreenPromptExecuting = true;
+  lastScreenPromptExecTime = now;
 
   const promptDef = SMART_SCREEN_PROMPTS.find(p => p.id === promptId);
   const actionName = customQuestion ? 'คำถามของคุณ' : (promptDef ? promptDef.name : 'วิเคราะห์');
@@ -4259,6 +4734,8 @@ async function executeScreenPrompt(promptId, customQuestion = null) {
     }
   } catch (err) {
     handleQuickAnswerError({ error: err.message });
+  } finally {
+    isScreenPromptExecuting = false;
   }
 }
 
@@ -4355,6 +4832,7 @@ function setupQuickTextContainerInteractions() {
   container.addEventListener('click', (e) => e.stopPropagation());
   container.addEventListener('pointerdown', (e) => e.stopPropagation());
   container.addEventListener('pointerup', (e) => e.stopPropagation());
+  initQuickAnswerResizeBottom();
 
   const customToggleBtn = document.getElementById('quickCustomToggleBtn');
   if (customToggleBtn) {

@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   triggerScan: () => ipcRenderer.send('trigger-scan'),
   cancelSnipping: () => ipcRenderer.send('cancel-snipping'),
   setAlwaysOnTop: (flag) => ipcRenderer.invoke('set-always-on-top', flag),
+  setQuickAnswerPinned: (flag) => ipcRenderer.send('set-quick-answer-pinned', flag),
   hideWindow: () => ipcRenderer.send('hide-window'),
   showWindow: () => ipcRenderer.send('show-window'),
   setIgnoreMouseEvents: (ignore, options) => ipcRenderer.send('set-ignore-mouse-events', ignore, options),
@@ -37,6 +38,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cropAndAnalyzeScreenStream: (params) => ipcRenderer.invoke('crop-and-analyze-screen-stream', params),
   fetchCategory: (params) => ipcRenderer.invoke('gemini-fetch-category', params),
   sendChatMessage: (query, modelId, context, history) => ipcRenderer.invoke('gemini-chat-message', { query, modelId, context, history }),
+  cancelAiGeneration: () => ipcRenderer.send('cancel-ai-generation'),
 
   // Gemini Tools (@google/genai SDK & Interactions API)
   getToolsConfig: () => ipcRenderer.invoke('gemini-get-tools-config'),
@@ -74,11 +76,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Event Listeners & Modal Triggers
   openSettings: () => ipcRenderer.send('open-settings'),
   openHistory: () => ipcRenderer.send('open-history'),
-  onStartSnipping: (callback) => ipcRenderer.on('start-snipping', (event, frames) => callback(frames)),
-  onCancelSnipping: (callback) => ipcRenderer.on('cancel-snipping-ui', () => callback()),
-  onOpenSettings: (callback) => ipcRenderer.on('open-settings-ui', () => callback()),
-  onOpenHistory: (callback) => ipcRenderer.on('open-history-ui', () => callback()),
-  onModelChangedFromTray: (callback) => ipcRenderer.on('model-changed-from-tray', (event, modelId) => callback(modelId)),
+  onStartSnipping: (callback) => {
+    ipcRenderer.removeAllListeners('start-snipping');
+    ipcRenderer.on('start-snipping', (event, frames) => callback(frames));
+  },
+  onCancelSnipping: (callback) => {
+    ipcRenderer.removeAllListeners('cancel-snipping-ui');
+    ipcRenderer.on('cancel-snipping-ui', () => callback());
+  },
+  onOpenSettings: (callback) => {
+    ipcRenderer.removeAllListeners('open-settings-ui');
+    ipcRenderer.on('open-settings-ui', () => callback());
+  },
+  onOpenHistory: (callback) => {
+    ipcRenderer.removeAllListeners('open-history-ui');
+    ipcRenderer.on('open-history-ui', () => callback());
+  },
+  notifyHistoryModalClosed: () => ipcRenderer.send('history-modal-closed'),
+  forwardHistoryToToolbar: (item) => ipcRenderer.send('forward-history-to-toolbar', item),
+  onLoadHistoryItemInToolbar: (callback) => {
+    ipcRenderer.removeAllListeners('load-history-item-in-toolbar');
+    ipcRenderer.on('load-history-item-in-toolbar', (event, item) => callback(item));
+  },
+  onModelChangedFromTray: (callback) => {
+    ipcRenderer.removeAllListeners('model-changed-from-tray');
+    ipcRenderer.on('model-changed-from-tray', (event, modelId) => callback(modelId));
+  },
   setActiveModel: (modelId) => ipcRenderer.invoke('set-active-model', modelId),
   onModelChanged: (callback) => {
     const handler = (event, data) => callback(data);
@@ -93,8 +116,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   quickTextAsk: (params) => ipcRenderer.invoke('gemini-quick-text-ask', params),
   getQuickStreamParams: (params) => ipcRenderer.invoke('get-quick-stream-params', params),
   saveQuickResponseCache: (params) => ipcRenderer.invoke('save-quick-response-cache', params),
-  onOpenQuickTextToolbar: (callback) => ipcRenderer.on('open-quick-text-toolbar', (event, data) => callback(data)),
-  onCloseQuickTextUI: (callback) => ipcRenderer.on('close-quick-text-ui', () => callback()),
+  onOpenQuickTextToolbar: (callback) => {
+    ipcRenderer.removeAllListeners('open-quick-text-toolbar');
+    ipcRenderer.on('open-quick-text-toolbar', (event, data) => callback(data));
+  },
+  onCloseQuickTextUI: (callback) => {
+    ipcRenderer.removeAllListeners('close-quick-text-ui');
+    ipcRenderer.on('close-quick-text-ui', () => callback());
+  },
   onQuickAnswerChunk: (callback) => {
     ipcRenderer.removeAllListeners('quick-answer-chunk');
     ipcRenderer.on('quick-answer-chunk', (event, data) => callback(data));
