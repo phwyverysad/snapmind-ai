@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings & Storage
   getSettings: () => ipcRenderer.invoke('get-settings'),
+  getConfig: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
 
@@ -142,6 +143,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('quick-answer-error');
   },
   setToolbarFocusable: (flag) => ipcRenderer.send('set-toolbar-focusable', flag),
+  setToolbarCustomAskOpen: (flag) => ipcRenderer.send('set-toolbar-custom-ask-open', flag),
+  setToolbarDragging: (flag) => ipcRenderer.send('set-toolbar-dragging', flag),
   resizeToolbarWindow: (bounds) => ipcRenderer.send('resize-toolbar-window', bounds),
   moveToolbarBy: (delta) => ipcRenderer.send('move-toolbar-by', delta),
   getClipboardText: () => ipcRenderer.invoke('get-clipboard-text'),
@@ -160,6 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('quick-text-custom-toggle', () => callback());
   },
   setToolbarAnswerActive: (active) => ipcRenderer.send('set-toolbar-answer-active', active),
+  dismissToolbarWindow: () => ipcRenderer.send('dismiss-toolbar-window'),
   onQuickTextCapturedUpdate: (callback) => {
     ipcRenderer.removeAllListeners('quick-text-captured-update');
     ipcRenderer.on('quick-text-captured-update', (event, data) => callback(data));

@@ -155,8 +155,69 @@ function copySelectedTextNative(targetHwnd = null) {
   return '';
 }
 
+// === DWM & WIN32 STEALTH / ANTI-ANIMATION BYPASS ===
+// Third-party window enhancement and animation programs (WindowFX, Stardock Curtains/WindowBlinds,
+// StartAllBack, DisplayFusion) hook window creation and activation events (EVENT_OBJECT_SHOW, WH_CBT).
+// To guarantee 100% undetected, instant 0ms appearance with zero opening animation:
+// 1. DWMWA_TRANSITIONS_FORCEDISABLED (3): Windows DWM compositor directly suppresses all window transitions.
+// 2. DWMWA_EXCLUDED_FROM_PEEK (12): Window is excluded from Aero Peek and task switcher animations.
+// 3. WS_EX_TOOLWINDOW (0x80): Standard tool window extended style. Third-party animators explicitly skip
+//    tool windows to prevent corrupting popups, context menus, and capture overlays.
+// 4. SetWindowPos with SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW: displays the window directly
+//    at the compositor level without triggering standard top-level window activation hooks.
+function disableWindowTransitionsNative(win) {
+  if (!win || win.isDestroyed()) return false;
+  try {
+    const hwndBuf = win.getNativeWindowHandle();
+    if (!hwndBuf || hwndBuf.length < 4) return false;
+    const hwnd = (hwndBuf.length >= 8) ? hwndBuf.readBigInt64LE(0) : hwndBuf.readInt32LE(0);
+    if (!hwnd || hwnd === 0n || hwnd === 0) return false;
+
+    initGdiCapture();
+
+    // 1. Force disable Windows DWM window transitions (DWMWA_TRANSITIONS_FORCEDISABLED = 3)
+    if (fnDwmSetWindowAttribute) {
+      const boolTrue = Buffer.alloc(4);
+      boolTrue.writeInt32LE(1, 0);
+      try {
+        fnDwmSetWindowAttribute(hwnd, 3, boolTrue, 4);
+      } catch (e) {}
+      try {
+        // Ensure window is excluded from taskbar/peek (DWMWA_EXCLUDED_FROM_PEEK = 12 set to true)
+        const boolTruePeek = Buffer.alloc(4);
+        boolTruePeek.writeInt32LE(1, 0);
+        fnDwmSetWindowAttribute(hwnd, 12, boolTruePeek, 4);
+      } catch (e) {}
+    }
+
+    // 2. Ensure window is hidden from Windows Taskbar (strip WS_EX_APPWINDOW and set WS_EX_TOOLWINDOW)
+    if (fnGetWindowLongPtr && fnSetWindowLongPtr) {
+      try {
+        const GWL_EXSTYLE = -20;
+        const WS_EX_TOOLWINDOW = 0x00000080;
+        const WS_EX_APPWINDOW = 0x00040000;
+        const currentStyle = Number(fnGetWindowLongPtr(hwnd, GWL_EXSTYLE));
+        const newStyle = (currentStyle & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW;
+        if (newStyle !== currentStyle) {
+          fnSetWindowLongPtr(hwnd, GWL_EXSTYLE, newStyle);
+          if (fnSetWindowPos) {
+            // SWP_NOSIZE (1) | SWP_NOMOVE (2) | SWP_NOZORDER (4) | SWP_NOACTIVATE (0x10) | SWP_FRAMECHANGED (0x20) = 0x37
+            fnSetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037);
+          }
+        }
+      } catch (styleErr) {
+        console.warn('[NativeBridge] SetWindowLongPtr error:', styleErr.message);
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('[NativeBridge] disableWindowTransitionsNative error:', err.message);
+    return false;
+  }
+}
+
 function makeWindowTopmostNative(win, bounds = null) {
-  if (!win || win.isDestroyed()) return;
+  if (!win || win.isDestroyed() || !win.isVisible()) return;
   try {
     const hwndBuf = win.getNativeWindowHandle();
     if (hwndBuf && hwndBuf.length >= 4) {
@@ -164,6 +225,7 @@ function makeWindowTopmostNative(win, bounds = null) {
       if (isLoaded || initNativeBridge()) {
         if (fnMakeWindowTopmost) fnMakeWindowTopmost(hwnd);
       }
+      disableWindowTransitionsNative(win);
       if (initGdiCapture()) {
         if (fnBringWindowToTop) {
           try { fnBringWindowToTop(hwnd); } catch (topErr) {}
@@ -329,6 +391,10 @@ function stopHookPolling() {
 let user32Lib = null;
 let gdi32Lib = null;
 let kernel32Lib = null;
+let dwmLib = null;
+let fnDwmSetWindowAttribute = null;
+let fnGetWindowLongPtr = null;
+let fnSetWindowLongPtr = null;
 let fnGetDC = null;
 let fnReleaseDC = null;
 let fnGetSystemMetrics = null;
@@ -352,7 +418,7 @@ let electronNativeImage = null;
 let savedForegroundHwnd = null;
 
 function initGdiCapture() {
-  if (fnBitBlt && fnGetDIBits) return true;
+  if (fnBitBlt && fnGetDIBits && fnDwmSetWindowAttribute && fnSetWindowLongPtr) return true;
   if (!koffi) {
     try {
       koffi = require('koffi');
@@ -365,6 +431,34 @@ function initGdiCapture() {
     if (!gdi32Lib) gdi32Lib = koffi.load('gdi32.dll');
     if (!kernel32Lib) {
       try { kernel32Lib = koffi.load('kernel32.dll'); } catch (e) {}
+    }
+    if (!dwmLib) {
+      try { dwmLib = koffi.load('dwmapi.dll'); } catch (e) {}
+    }
+    if (dwmLib && !fnDwmSetWindowAttribute) {
+      try {
+        fnDwmSetWindowAttribute = dwmLib.func('int __stdcall DwmSetWindowAttribute(intptr_t hwnd, uint32 dwAttribute, void *pvAttribute, uint32 cbAttribute)');
+      } catch (e) {}
+    }
+    if (user32Lib) {
+      if (!fnGetWindowLongPtr) {
+        try {
+          fnGetWindowLongPtr = user32Lib.func('intptr_t __stdcall GetWindowLongPtrW(intptr_t hWnd, int nIndex)');
+        } catch (e) {
+          try {
+            fnGetWindowLongPtr = user32Lib.func('intptr_t __stdcall GetWindowLongW(intptr_t hWnd, int nIndex)');
+          } catch (e2) {}
+        }
+      }
+      if (!fnSetWindowLongPtr) {
+        try {
+          fnSetWindowLongPtr = user32Lib.func('intptr_t __stdcall SetWindowLongPtrW(intptr_t hWnd, int nIndex, intptr_t dwNewLong)');
+        } catch (e) {
+          try {
+            fnSetWindowLongPtr = user32Lib.func('intptr_t __stdcall SetWindowLongW(intptr_t hWnd, int nIndex, intptr_t dwNewLong)');
+          } catch (e2) {}
+        }
+      }
     }
 
     if (!fnGetDC) fnGetDC = user32Lib.func('intptr_t __stdcall GetDC(intptr_t hWnd)');
@@ -561,7 +655,7 @@ function cancelNativeScreenCapture() {
   }
 }
 
-function captureScreenFreezeNativeFast(quality = 78) {
+function captureScreenFreezeNativeFast(quality = 92) {
   if (!initNativeCapture() || !fnNativeCaptureScreenFreezeJpeg) return null;
   const t0 = Date.now();
   try {
@@ -635,9 +729,9 @@ function cropFreezeImageNativeFast(rect, quality = 80) {
   return null;
 }
 
-function captureScreenFreezeNative() {
+function captureScreenFreezeNative(quality = 92) {
   // Ultra-fast path: Native C++ GDI+ Capture to JPEG in RAM (< 15ms, zero disk I/O)
-  const fastRes = captureScreenFreezeNativeFast();
+  const fastRes = captureScreenFreezeNativeFast(quality);
   if (fastRes) {
     return fastRes;
   }
@@ -652,48 +746,49 @@ function captureScreenFreezeNative() {
 
     if (vw <= 0 || vh <= 0) return null;
 
-    const hdcScreen = fnGetDC(0);
-    if (!hdcScreen) return null;
+    let hdcScreen = null;
+    let hdcMem = null;
+    let hBitmap = null;
+    let buf = null;
+    try {
+      hdcScreen = fnGetDC(0);
+      if (!hdcScreen) return null;
 
-    const hdcMem = fnCreateCompatibleDC(hdcScreen);
-    if (!hdcMem) {
-      fnReleaseDC(0, hdcScreen);
-      return null;
+      hdcMem = fnCreateCompatibleDC(hdcScreen);
+      if (!hdcMem) return null;
+
+      hBitmap = fnCreateCompatibleBitmap(hdcScreen, vw, vh);
+      if (!hBitmap) return null;
+
+      const hOld = fnSelectObject(hdcMem, hBitmap);
+      const SRCCOPY = 0x00CC0020;
+      const CAPTUREBLT = 0x40000000;
+      fnBitBlt(hdcMem, 0, 0, vw, vh, hdcScreen, vx, vy, SRCCOPY | CAPTUREBLT);
+      fnSelectObject(hdcMem, hOld);
+
+      const bmi = {
+        biSize: 40,
+        biWidth: vw,
+        biHeight: -vh, // top-down BGRA
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: 0,
+        biSizeImage: vw * vh * 4,
+        biXPelsPerMeter: 0,
+        biYPelsPerMeter: 0,
+        biClrUsed: 0,
+        biClrImportant: 0
+      };
+
+      buf = Buffer.alloc(vw * vh * 4);
+      fnGetDIBits(hdcMem, hBitmap, 0, vh, buf, bmi, 0);
+    } finally {
+      if (hBitmap) fnDeleteObject(hBitmap);
+      if (hdcMem) fnDeleteDC(hdcMem);
+      if (hdcScreen) fnReleaseDC(0, hdcScreen);
     }
 
-    const hBitmap = fnCreateCompatibleBitmap(hdcScreen, vw, vh);
-    if (!hBitmap) {
-      fnDeleteDC(hdcMem);
-      fnReleaseDC(0, hdcScreen);
-      return null;
-    }
-
-    const hOld = fnSelectObject(hdcMem, hBitmap);
-    const SRCCOPY = 0x00CC0020;
-    const CAPTUREBLT = 0x40000000;
-    fnBitBlt(hdcMem, 0, 0, vw, vh, hdcScreen, vx, vy, SRCCOPY | CAPTUREBLT);
-    fnSelectObject(hdcMem, hOld);
-
-    const bmi = {
-      biSize: 40,
-      biWidth: vw,
-      biHeight: -vh, // top-down BGRA
-      biPlanes: 1,
-      biBitCount: 32,
-      biCompression: 0,
-      biSizeImage: vw * vh * 4,
-      biXPelsPerMeter: 0,
-      biYPelsPerMeter: 0,
-      biClrUsed: 0,
-      biClrImportant: 0
-    };
-
-    const buf = Buffer.alloc(vw * vh * 4);
-    fnGetDIBits(hdcMem, hBitmap, 0, vh, buf, bmi, 0);
-
-    fnDeleteObject(hBitmap);
-    fnDeleteDC(hdcMem);
-    fnReleaseDC(0, hdcScreen);
+    if (!buf) return null;
 
     if (!electronNativeImage) {
       try {
@@ -874,6 +969,7 @@ module.exports = {
   isDllAvailable,
   copySelectedTextNative,
   makeWindowTopmostNative,
+  disableWindowTransitionsNative,
   releaseModifiersNative,
   isMouseClickedOutsideNative,
   startNativeKeyboardHook,

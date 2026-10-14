@@ -758,6 +758,20 @@ __declspec(dllexport) int __stdcall StartNativeScreenSelection(
         return 0;
     }
 
+    // Deeply suppress all DWM transitions and animations for instant, stealth overlay display
+    {
+        BOOL disableTransitions = TRUE;
+        typedef HRESULT (WINAPI *pfnDwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD);
+        HMODULE hDwm = LoadLibraryW(L"dwmapi.dll");
+        if (hDwm) {
+            auto setAttr = (pfnDwmSetWindowAttribute)GetProcAddress(hDwm, "DwmSetWindowAttribute");
+            if (setAttr) {
+                setAttr(g_hOverlayWnd, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, &disableTransitions, sizeof(BOOL));
+                setAttr(g_hOverlayWnd, 12 /* DWMWA_EXCLUDED_FROM_PEEK */, &disableTransitions, sizeof(BOOL));
+            }
+        }
+    }
+
     ShowWindow(g_hOverlayWnd, SW_SHOW);
     UpdateWindow(g_hOverlayWnd);
     SetForegroundWindow(g_hOverlayWnd);

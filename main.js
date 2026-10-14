@@ -158,56 +158,63 @@ const DEFAULT_TEXT_PROMPTS = [
     id: 'answer',
     name: 'คำตอบ',
     icon: 'check-circle',
-    template: 'ตอบคำถาม แก้โจทย์ หรือให้คำตอบที่ละเอียด ถูกต้อง ชัดเจน และเป็นธรรมชาติจากข้อความเป้าหมายต่อไปนี้ (หากมีหลายหัวข้อหรือหลายประเด็นให้จัดเป็น bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย, หากเป็นข้อมูลดิบหรือคำตอบค่าเดียวให้แสดงตามโครงสร้างเดิม):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'ตอบคำถาม แก้โจทย์ หรือระบุคำตอบที่ถูกต้อง แม่นยำ ชัดเจน ตรงประเด็นทันที ครบถ้วนทุกประเด็น (ให้ตอบเฉพาะเนื้อหาคำตอบหรือผลลัพธ์สุดท้ายทันที สั้นกระชับ ชัดเจน ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ ไม่ต้องใส่คำว่า "คำตอบ:", "คำตอบคือ", หรือ "**คำตอบ:**" นำหน้าเด็ดขาด หากเป็นโจทย์หรือตัวเลือก ให้ระบุตัวเลือกที่ถูกต้องพร้อมเหตุผล หากเป็นการคำนวณให้ใช้ LaTeX):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'explain',
     name: 'อธิบาย',
     icon: 'book-open',
-    template: 'อธิบายข้อความเป้าหมายต่อไปนี้อย่างละเอียด ชัดเจน สละสลวย และเป็นธรรมชาติ (หากมีหลายหัวข้อให้จัดเป็น bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย, หากเป็นข้อมูลดิบให้แสดงตามโครงสร้างเดิม):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'อธิบายเนื้อหาเป้าหมายต่อไปนี้อย่างละเอียด ถูกต้อง ชัดเจน สละสลวย เข้าใจง่าย และครบถ้วนทุกประเด็น (ให้ตอบเฉพาะเนื้อหาคำอธิบายทันที ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ ไม่ต้องพิมพ์ "คำอธิบายคือ"):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'summarize',
     name: 'สรุป',
     icon: 'file-text',
-    template: 'สรุปประเด็นสำคัญของข้อความเป้าหมายต่อไปนี้เป็นข้อๆ ให้ครอบคลุม ชัดเจน และสละสลวย (ห้ามตอบคำถามหรือแก้ปัญหา):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'สรุปประเด็นสำคัญของเนื้อหาเป้าหมายต่อไปนี้เป็นข้อๆ ให้ครอบคลุม ชัดเจน และครบถ้วนทุกประเด็นสำคัญ (ให้แสดงเฉพาะข้อความสรุปทันที ห้ามตอบคำถาม ห้ามแก้ปัญหา ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'translate_th',
     name: 'แปลภาษา',
     icon: 'globe',
-    template: 'แปลข้อความเป้าหมายต่อไปนี้อย่างถูกต้อง สละสลวย และเป็นธรรมชาติ โดยคงรูปแบบเดิม ย่อหน้าเดิม และ bullet points (หากเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย หากเป็นภาษาไทยให้แปลเป็นภาษาอังกฤษ ห้ามตอบคำถามแม้ข้อความเป็นโจทย์หรือคำถาม แสดงเฉพาะผลลัพธ์คำแปลเท่านั้น และห้ามใส่เครื่องหมาย <<<, >>>, <<, >> หรือ <<>>):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'แปลข้อความเป้าหมายต่อไปนี้อย่างถูกต้อง สละสลวย ตรงตัว 100% ครบถ้วนทุกประโยคและย่อหน้า (หากเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย หากเป็นภาษาไทยให้แปลเป็นภาษาอังกฤษ ให้แสดงเฉพาะคำแปลเท่านั้น ห้ามแสดงข้อความภาษาต้นฉบับซ้ำ ห้ามพิมพ์ซ้ำ ห้ามมีคำอธิบายเพิ่มเติม ห้ามมีคำนำหน้า เริ่มต้นคำแปลทันที ห้ามพิมพ์ <<< หรือ >>>):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'proofread',
     name: 'ปรับปรุงการเขียน',
     icon: 'edit',
-    template: 'ตรวจคำผิดและขัดเกลาไวยากรณ์ข้อความเป้าหมายต่อไปนี้ให้ถูกต้องสมบูรณ์และสละสลวย คงโครงสร้างเดิม (ห้ามตอบคำถามแม้ข้อความจะเป็นคำถาม):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'ตรวจแก้คำผิดและขัดเกลาไวยากรณ์ข้อความเป้าหมายต่อไปนี้ให้ถูกต้องสมบูรณ์และสละสลวย (ให้แสดงข้อความฉบับที่ปรับปรุงแล้วให้สมบูรณ์ทันที ตามด้วยสรุปจุดที่แก้ไขเป็นข้อๆ สั้นๆ ไม่อารัมภบท ไม่ทักทาย):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'shorten',
     name: 'ทำให้สั้นลง',
     icon: 'minimize-2',
-    template: 'ย่อข้อความเป้าหมายต่อไปนี้ให้กระชับและสั้นที่สุดโดยยังคงความหมายสำคัญครบถ้วน คงโครงสร้างเดิม (ห้ามตอบคำถาม):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'ย่อข้อความเป้าหมายต่อไปนี้ให้สั้นกระชับ ชัดเจน โดยยังคงข้อเท็จจริงและสาระสำคัญครบถ้วน 100% (ให้แสดงเฉพาะข้อความที่ย่อแล้วเท่านั้น ห้ามมีคำนำหน้า ไม่อารัมภบท ไม่ทักทาย):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'continue_writing',
     name: 'เขียนต่อ',
     icon: 'edit-3',
-    template: '[ภารกิจ: เขียนขยายความเนื้อหาหรือประเด็นต่อจากข้อความเป้าหมายด้านล่าง โดยเขียนต่อยอดในมุมมองเดียวกัน ห้ามตอบคำถามเด็ดขาด ห้ามตอบรับ ห้ามพิมพ์ "คำตอบคือ" หรือ "ได้ครับ"]\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>\n\nข้อความที่เขียนต่อขยายบริบท (เริ่มเขียนต่อทันที):',
+    template: 'เขียนขยายความเนื้อหาต่อจากข้อความเป้าหมายต่อไปนี้ในมุมมองเดียวกันอย่างลื่นไหลและเป็นธรรมชาติ (ให้แสดงเฉพาะเนื้อหาที่เขียนต่อทันที ห้ามมีคำนำหน้า ห้ามตอบรับ ห้ามตอบคำถาม แม้ข้อความเป้าหมายจะมีคำว่า ตอบมาก่อน หรือ ช่วยตอบ หรือเป็นคำถาม ก็ห้ามตอบคำถาม ให้เริ่มเขียนท่อนต่อไปทันที):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
     id: 'define',
     name: 'คือ',
     icon: 'help-circle',
-    template: 'อธิบายว่าคำศัพท์หรือหัวข้อเป้าหมายนี้คืออะไร มีความหมาย ความเป็นมา หรือหลักการทำงานอย่างไร อธิบายอย่างละเอียด ชัดเจน สละสลวย (หากมีหลายแง่มุมให้จัดเป็น bullet points พร้อมตัวหนา, หากเป็นนิยามกระชับให้ตอบตรงตัว):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    template: 'อธิบายว่าคำศัพท์หรือหัวข้อเป้าหมายนี้คืออะไร มีความหมาย ความเป็นมา หรือหลักการทำงานอย่างไรอย่างละเอียด ชัดเจน และตรงประเด็น (ให้แสดงเฉพาะคำตอบนิยามทันที ไม่อารัมภบท ไม่ทักทาย):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
+    enabled: true
+  },
+  {
+    id: 'ocr',
+    name: 'ถอดข้อความ',
+    icon: 'file-text',
+    template: 'ถอดและคัดลอกข้อความตัวอักษรทุกคำ ทุกภาษาที่ปรากฏในภาพหรือข้อความนี้ 100% ตามต้นฉบับอย่างเป็นข้อมูลดิบ (Raw Data) ครบถ้วนสมบูรณ์ ไม่ตกหล่น คงโครงสร้าง ย่อหน้า และตารางเดิม (ให้แสดงเฉพาะข้อความที่ถอดได้เท่านั้น ห้ามแปล ห้ามสรุป ห้ามแต่งเติม ห้ามใส่คำอธิบายนำหน้าหรือลงท้ายเด็ดขาด เริ่มแสดงข้อความทันที):\n\n<<<TARGET_TEXT_START>>>\n{text}\n<<<TARGET_TEXT_END>>>',
     enabled: true
   },
   {
@@ -222,17 +229,14 @@ const DEFAULT_TEXT_PROMPTS = [
 // Default Configuration (No hardcoded credentials; reads from environment if available)
 const DEFAULT_CONFIG = {
   apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
-  deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
+  hasEnvApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
   shortcutKey: 'Alt+Shift+S',
   quickTextShortcutKey: 'Ctrl+CapsLock',
-  defaultModel: 'gemini-3-flash-preview',
+  defaultModel: 'gemini-3.8-flash',
   modelThinking: {
-    'gemini-3-flash-preview': false,
     'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
-    'gemini-3.1-pro-preview': true,
-    'deepseek-flash': false,
-    'deepseek-v4-pro': true
+    'gemini-3.1-pro-preview': true
   },
   textPrompts: DEFAULT_TEXT_PROMPTS,
   tools: {
@@ -247,42 +251,28 @@ const DEFAULT_CONFIG = {
     longitude: 100.5018
   },
   autoLaunch: false,
-  useNativeCapture: true
+  useNativeCapture: true,
+  dismissOnOutsideClick: false
 };
 
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints (Main Flagship Models)
 const MODEL_API_ENDPOINT_MAP = {
-  'gemini-3-flash-preview': 'gemini-3-flash-preview',
   'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
-  'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview',
-  'deepseek-flash': 'deepseek-flash',
-  'deepseek-v4-pro': 'deepseek-v4-pro',
-  'deepseek-chat': 'deepseek-chat',
-  'deepseek-reasoner': 'deepseek-reasoner'
+  'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };
 
 const TRAY_MODELS = [
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash' },
   { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
-  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' },
-  { id: 'deepseek-flash', name: 'DeepSeek Flash' },
-  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' }
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
 ];
 
 function isDeepSeekModel(modelId) {
-  if (!modelId || typeof modelId !== 'string') return false;
-  return modelId.startsWith('deepseek') || modelId.includes('deepseek');
+  return false;
 }
 
 function getEffectiveApiKey(modelId) {
-  if (isDeepSeekModel(modelId)) {
-    return (currentConfig && currentConfig.deepseekApiKey) ||
-      process.env.DEEPSEEK_API_KEY ||
-      (currentConfig && currentConfig.apiKey && currentConfig.apiKey.startsWith('sk-') ? currentConfig.apiKey : '') ||
-      '';
-  }
   return (currentConfig && currentConfig.apiKey) ||
     process.env.GEMINI_API_KEY ||
     process.env.GOOGLE_API_KEY ||
@@ -290,15 +280,6 @@ function getEffectiveApiKey(modelId) {
 }
 
 function getThinkingConfigForModel(modelId) {
-  if (isDeepSeekModel(modelId)) {
-    const modelThinking = (currentConfig && currentConfig.modelThinking) || DEFAULT_CONFIG.modelThinking;
-    const isEnabled = modelThinking && modelThinking[modelId];
-    return {
-      thinking: {
-        type: isEnabled ? 'enabled' : 'disabled'
-      }
-    };
-  }
 
   // Flash-Lite models do NOT support thinkingConfig at all (sending it causes HTTP 400 error)
   if (modelId && (modelId.includes('flash-lite') || modelId.includes('lite'))) {
@@ -372,62 +353,152 @@ function isEndpointHealthy(endpoint) {
   return false;
 }
 
-function getCandidateEndpoints(modelId) {
-  if (typeof isDeepSeekModel === 'function' && isDeepSeekModel(modelId)) {
-    const deepseekFallbacks = {
-      'deepseek-flash': ['deepseek-flash', 'deepseek-chat'],
-      'deepseek-v4-pro': ['deepseek-v4-pro', 'deepseek-reasoner', 'deepseek-flash', 'deepseek-chat'],
-      'deepseek-chat': ['deepseek-chat', 'deepseek-flash'],
-      'deepseek-reasoner': ['deepseek-reasoner', 'deepseek-v4-pro', 'deepseek-chat']
-    };
-    const cands = deepseekFallbacks[modelId] || [modelId, 'deepseek-flash', 'deepseek-chat'];
-    return Array.from(new Set([modelId, ...cands]));
+// === AUTOMATIC MATH PROBLEM & CODE EXECUTION DETECTOR ===
+// Detects if user query, copied text, or prompt context represents a math problem / calculation / equation.
+// When detected, the system automatically activates and binds Code Execution ({ codeExecution: {} }),
+// ensuring exact mathematical precision via Python execution across all models ("ไม่ว่าจะเป็นโมเดลไหนๆ").
+function isMathProblem(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  if (!clean) return false;
+
+  // 1. Thai math keywords
+  const thaiMathRegex = /(?:โจทย์|คำนวณ|แก้สมการ|หาค่า|จงหา|ผลลัพธ์|เศษส่วน|ทศนิยม|ร้อยละ|เปอร์เซ็นต์|สมการ|อสมการ|ฟังก์ชัน|อนุพันธ์|ดิฟ|อินทิกรัล|อินทิเกรต|เมทริกซ์|เวกเตอร์|ตรีโกณ|ตรีโกณมิติ|เรขาคณิต|พีชคณิต|แคลคูลัส|ความน่าจะเป็น|สถิติ|พื้นที่|ปริมาตร|ความชัน|เส้นรอบรูป|ยกกำลัง|กำลังสอง|รากที่|พหุนาม|ลำดับ|อนุกรม|เลขคณิต|สูตรคูณ|ค่าเฉลี่ย|มัธยฐาน|ฐานนิยม|ส่วนเบี่ยงเบน|สมการเชิงเส้น|กราฟพาราโบลา|ไฮเพอร์โบลา|วงรี)/i;
+  if (thaiMathRegex.test(clean)) return true;
+
+  // 2. English math keywords
+  const englishMathRegex = /\b(?:math|calculate|compute|solve|equation|equations|evaluate|eval|integral|integrate|derivative|differentiate|matrix|matrices|vector|vectors|algebra|calculus|trigonometry|geometry|probability|statistics|fraction|fractions|percentage|polynomial|logarithm|factorial|pythagorean|arithmetic|hypotenuse|parabola|ellipse|hyperbola|determinant|eigenvalue|eigenvector|variance|standard deviation|linear equation|quadratic)\b/i;
+  if (englishMathRegex.test(clean)) return true;
+
+  // 3. LaTeX math symbols & operators
+  const latexMathRegex = /\\(?:frac|sqrt|sum|int|lim|alpha|beta|gamma|theta|pi|cdot|times|div|pm|leq|geq|neq|approx|infty|partial|Delta|nabla|prod|coprod|oint)/;
+  if (latexMathRegex.test(clean)) return true;
+
+  // 4. Mathematical equations / arithmetic expressions with equals
+  const equalsEquationRegex = /(?:[\da-zA-Z\(\)\^+\-*/\s]{2,})\s*=\s*(?:[\da-zA-Z\(\)\^+\-*/\s]{1,})/;
+  if (equalsEquationRegex.test(clean) && /[\d+\-*/\^=]/.test(clean)) return true;
+
+  // 5. Arithmetic operations: e.g. 123 * 456, 50 / 2, 10 + 25 - 3, 2^8, 15%
+  const arithmeticRegex = /\d+\s*[\+\-\*\/×÷\^%]\s*\d+/;
+  if (arithmeticRegex.test(clean)) return true;
+
+  // 6. Math functions: e.g. sin(30), cos(x), tan(pi), log(100), ln(e), sqrt(144)
+  const mathFuncRegex = /\b(?:sin|cos|tan|cot|sec|csc|log|ln|sqrt|exp|asin|acos|atan)\s*\(/i;
+  if (mathFuncRegex.test(clean)) return true;
+
+  return false;
+}
+
+const MATH_CODE_EXECUTION_SYSTEM_INSTRUCTION = `
+
+[โหมดคำนวณและประมวลผลโค้ด (Code Execution)] - ตอบตรงๆ แม่นยำ ครบถ้วน:
+ตรวจพบว่าเป็นโจทย์คณิตศาสตร์หรือการคำนวณ:
+1. ให้ใช้เครื่องมือ Code Execution (Python) คำนวณเบื้องหลังเพื่อหาคำตอบที่ถูกต้องแม่นยำ 100% เสมอ
+2. เขียนโค้ด Python คำนวณเบื้องหลัง เช่น print(คำตอบ) เพื่อให้ได้ผลลัพธ์ที่ถูกต้องและรวดเร็ว
+3. ไม่ต้องแสดง Code Execution หรือโค้ด Python และไม่ต้องแสดงผลการรันคอนโซลในคำตอบเด็ดขาด
+4. ให้แสดงคำตอบที่ได้เลยทันที ชัดเจน ถูกต้อง แม่นยำ ครบถ้วน:
+   - แสดงผลลัพธ์หรือคำตอบสุดท้ายที่ได้ทันที ค่าของตัวแปร ผลลัพธ์สมการ หรือสิ่งที่โจทย์ถาม
+   - หากมีขั้นตอนการพิสูจน์หรือวิธีคิด ให้สรุปขั้นตอนสำคัญอย่างชัดเจน ครบถ้วน ไม่ตัดทอน
+   - จัดรูปแบบสูตร ตัวแปร และสัญลักษณ์คณิตศาสตร์ด้วย LaTeX ($...$ หรือ $$...$$) ให้สวยงาม คมชัด
+5. ข้อกำหนดสำคัญที่สุด: หลังจากรันโค้ดเสร็จสิ้นแล้ว ให้แสดงผลลัพธ์หรือคำตอบโดยตรงทันที ไม่ต้องใส่คำว่า "คำตอบ:", "คำตอบคือ", หรือ "**คำตอบ:**" นำหน้าเด็ดขาด ให้แสดงเฉพาะค่าหรือผลลัพธ์คำตอบเลยทันที เช่น หากคำตอบคือ 2006 ให้ตอบ 2006 หรือ **2006** โดยตรงทันที`;
+
+function stripLeadingAnswerPrefix(text) {
+  if (!text || typeof text !== 'string') return '';
+  let clean = text.trim();
+  const prefixRegex = /^(?:[-*•]\s*)?(?:#{1,6}\s*)?(?:\*{1,3}|_{1,3})?(?:คำตอบที่ถูกต้องคือ|คำตอบที่ถูกต้อง|คำตอบที่ได้คือ|คำตอบของโจทย์คือ|คำตอบข้อนี้คือ|คำตอบคือ|คำตอบ(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|ผลการ(?:แปล(?:ภาษา(?:ไทย|อังกฤษ)?)?|วิเคราะห์(?:ภาพ)?|สรุป|ปรับปรุง|ตรวจ(?:ข้อความ)?|ย่อ(?:ข้อความ)?|ถอดข้อความ|ดำเนินงาน)(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|ผลลัพธ์(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|คำแปล(?:ภาษาไทย|ภาษาอังกฤษ)?(?:\s*[:=\n]|\s*คือ|\s*มีดังนี้|\s*(?:\*{1,3}|_{1,3}))|(?:ข้อความ)?ฉบับ(?:แก้ไข|ปรับปรุง|ย่อ)(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|ข้อความที่(?:แปล|ปรับปรุงแล้ว|ปรับปรุง|แก้ไข|ย่อแล้ว|ถอดได้)(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|สรุป(?:ประเด็นสำคัญ|สาระสำคัญ|ได้ว่า|คือ)(?:\s*[:=])?|สรุป(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|คำอธิบาย(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|(?:ความหมาย|คำนิยาม|นิยาม)(?:\s*[:=\n]|\s*คือ|\s*(?:\*{1,3}|_{1,3}))|ถอดข้อความ(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|ข้อความจากภาพ(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Answer(?:\s+is)?(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Correct\s+Answer(?:\s+is)?(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Translation(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Summary(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Explanation(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Definition(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3}))|Result(?:\s*[:=\n]|\s*(?:\*{1,3}|_{1,3})))(?:\*{1,3}|_{1,3})?\s*[:=]?\s*/i;
+
+  let prev = '';
+  let count = 0;
+  while (clean !== prev && count < 3) {
+    prev = clean;
+    clean = clean.replace(prefixRegex, '').trim();
+    count++;
+  }
+  return clean;
+}
+
+function extractDirectAnswerFromOutput(output) {
+  if (!output || typeof output !== 'string') return '';
+  if (/(?:Traceback\s+\(most\s+recent\s+call\s+last\)|SyntaxError:|NameError:|TypeError:|ZeroDivisionError:)/i.test(output)) {
+    return '';
+  }
+  const lines = output.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return '';
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    const match = line.match(/(?:(?:minimum|maximum|optimum|final)?\s*(?:value|answer|result|val|sol|solution|คำตอบ)|direct\s+substitution)[:=]\s*(.+)$/i);
+    if (match && match[1]) {
+      let val = match[1].trim();
+      if (/^\d+\.0$/.test(val)) val = val.slice(0, -2);
+      return stripLeadingAnswerPrefix(val);
+    }
   }
 
+  const lastLine = lines[lines.length - 1];
+  if (lastLine.length < 100) {
+    let cleanLast = lastLine.replace(/^\[|\s*\]$/g, '').trim();
+    if (/^\d+\.0$/.test(cleanLast)) cleanLast = cleanLast.slice(0, -2);
+    return stripLeadingAnswerPrefix(cleanLast || lastLine);
+  }
+
+  return stripLeadingAnswerPrefix(lastLine);
+}
+
+function stripCodeExecutionAndExtractAnswer(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  let collectedOutputs = [];
+  const outRegex = /(?:\*\*ผลลัพธ์ Code Execution:\*\*|\*\*Code Execution Result:\*\*|ผลลัพธ์ Code Execution:)\s*(?:```(?:\w+)?\n?([\s\S]*?)```|([^\n`]+))/gi;
+  let outMatch;
+  while ((outMatch = outRegex.exec(text)) !== null) {
+    const outContent = (outMatch[1] || outMatch[2] || '').trim();
+    if (outContent) {
+      collectedOutputs.push(outContent);
+    }
+  }
+
+  let cleaned = text.replace(/```python\s*#\s*Code Execution[^\n]*[\s\S]*?(?:```|$)/gi, '');
+  cleaned = cleaned.replace(/(?:\*\*ผลลัพธ์ Code Execution:\*\*|\*\*Code Execution Result:\*\*|ผลลัพธ์ Code Execution:)\s*(?:```[\s\S]*?(?:```|$)|[^\n`]+(?:\n|$))?/gi, '');
+  cleaned = cleaned.replace(/^\s*#\s*Code Execution\s*\(คำนวณและประมวลผลโค้ด\)[^\n]*/gim, '');
+  cleaned = cleaned.replace(/^\s*ผลลัพธ์ Code Execution:\s*$/gim, '');
+  cleaned = cleaned.trim();
+
+  if (cleaned) {
+    return stripLeadingAnswerPrefix(cleaned);
+  }
+
+  if (collectedOutputs.length > 0) {
+    const combinedOutput = collectedOutputs.join('\n');
+    return stripLeadingAnswerPrefix(extractDirectAnswerFromOutput(combinedOutput));
+  }
+
+  return '';
+}
+
+function getCandidateEndpoints(modelId) {
   const specificFallbacks = {
-    'gemini-3-flash-preview': [
-      'gemini-3-flash-preview',
-      'gemini-3.6-flash',
-      'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-3.5-flash',
-      'gemini-3.8-flash'
-    ],
     'gemini-3.8-flash': [
       'gemini-3.8-flash',
-      'gemini-3.6-flash',
-      'gemini-3-flash-preview',
-      'gemini-flash-lite-latest',
       'gemini-3.5-flash-lite',
-      'gemini-3.5-flash'
+      'gemini-3.1-pro-preview'
     ],
     'gemini-3.5-flash-lite': [
       'gemini-3.5-flash-lite',
-      'gemini-3.6-flash',
-      'gemini-flash-lite-latest',
-      'gemini-3-flash-preview',
-      'gemini-3.5-flash'
+      'gemini-3.8-flash',
+      'gemini-3.1-pro-preview'
     ],
     'gemini-3.1-pro-preview': [
       'gemini-3.1-pro-preview',
-      'gemini-3.1-pro',
-      'gemini-2.5-pro',
       'gemini-3.8-flash',
-      'gemini-3.6-flash',
-      'gemini-3-flash-preview',
-      'gemini-flash-lite-latest',
-      'gemini-3.5-flash-lite',
-      'gemini-3.5-flash'
+      'gemini-3.5-flash-lite'
     ]
   };
-  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3-flash-preview';
+  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3.8-flash';
   const fallbacks = specificFallbacks[modelId] || [
-    'gemini-3.6-flash',
-    'gemini-3-flash-preview',
-    'gemini-flash-lite-latest',
+    'gemini-3.8-flash',
     'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-3.8-flash'
+    'gemini-3.1-pro-preview'
   ];
   const allCandidates = Array.from(new Set([primary, ...fallbacks]));
   // Order healthy endpoints first to guarantee sub-second first token latency
@@ -437,22 +508,16 @@ function getCandidateEndpoints(modelId) {
   return healthy.length > 0 ? [...healthy, ...coolingDown] : allCandidates;
 }
 
-
 function validateApiKeyFormat(apiKey) {
-  const modelId = arguments.length > 1 ? arguments[1] : null;
-  const isDeepSeek = (typeof isDeepSeekModel === 'function') ? isDeepSeekModel(modelId) : false;
-  const providerName = isDeepSeek ? 'DeepSeek' : 'Google AI Studio';
-  const siteUrl = isDeepSeek ? 'https://platform.deepseek.com' : 'https://aistudio.google.com';
-
   if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
-    const err = new Error(`กรุณาระบุ ${providerName} API Key ในการตั้งค่าก่อนเริ่มใช้งาน (Settings)`);
+    const err = new Error('กรุณาระบุ Gemini API Key ในการตั้งค่าก่อนเริ่มใช้งาน (Settings)');
     err.code = 'API_KEY_REQUIRED';
     return err;
   }
   const cleanKey = apiKey.trim();
   // Check for non-ASCII or Thai characters
   if (/[^\x20-\x7E]/.test(cleanKey)) {
-    const err = new Error(`${providerName} API Key ไม่ถูกต้อง (ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ) กรุณาตรวจสอบและคัดลอก API Key ที่ถูกต้องจาก ${siteUrl} ในหน้าตั้งค่า (Settings)`);
+    const err = new Error('Gemini API Key ไม่ถูกต้อง (ตรวจพบตัวอักษรภาษาไทยหรืออักขระพิเศษ) กรุณาตรวจสอบและคัดลอก API Key ที่ถูกต้องจาก https://aistudio.google.com ในหน้าตั้งค่า (Settings)');
     err.code = 'INVALID_API_KEY_FORMAT';
     return err;
   }
@@ -517,11 +582,9 @@ function loadConfig() {
         tools: {
           ...DEFAULT_CONFIG.tools,
           ...(parsed.tools || {})
-        }
+        },
+        hasEnvApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
       };
-      if (parsed.deepseekApiKey !== undefined) {
-        currentConfig.deepseekApiKey = parsed.deepseekApiKey;
-      }
 
       let configNeedsSave = false;
 
@@ -548,7 +611,7 @@ function loadConfig() {
           if (def) {
             if (p.name !== def.name) { p.name = def.name; configNeedsSave = true; }
             if (p.icon !== def.icon) { p.icon = def.icon; configNeedsSave = true; }
-            if (!p.template || !p.template.includes('<<<TARGET_TEXT_START>>>') || (p.id === 'translate_th' && !p.template.includes('ภาษาอังกฤษ'))) {
+            if (!p.template || !p.template.includes('<<<TARGET_TEXT_START>>>') || (p.id === 'translate_th' && !p.template.includes('ภาษาอังกฤษ')) || (p.id === 'ocr')) {
               p.template = def.template;
               configNeedsSave = true;
             }
@@ -580,10 +643,21 @@ function loadConfig() {
         }
       }
 
-      // Ensure defaultModel is set
-      if (!currentConfig.defaultModel) {
-        currentConfig.defaultModel = 'gemini-3-flash-preview';
+      // Ensure defaultModel is set and strictly among allowed models
+      const validModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'];
+      if (!currentConfig.defaultModel || !validModels.includes(currentConfig.defaultModel)) {
+        currentConfig.defaultModel = 'gemini-3.8-flash';
         configNeedsSave = true;
+      }
+
+      if (currentConfig.modelThinking) {
+        const cleanedThinking = {};
+        for (const m of validModels) {
+          cleanedThinking[m] = currentConfig.modelThinking[m] !== undefined
+            ? currentConfig.modelThinking[m]
+            : (m === 'gemini-3.1-pro-preview');
+        }
+        currentConfig.modelThinking = cleanedThinking;
       }
 
       if (configNeedsSave) {
@@ -931,25 +1005,29 @@ function createToolbarWindow() {
   let appIcon = iconPath ? nativeImage.createFromPath(iconPath) : null;
 
   toolbarWindow = new BrowserWindow({
-    title: 'SnapMind AI - Floating Toolbar',
+    title: 'SnapMind AI',
     icon: appIcon || undefined,
-    width: 1060, // Signature compat: width: 940 // Signature compat: width: 920
+    width: 1180, // Signature compat: width: 1060 // Signature compat: width: 940 // Signature compat: width: 920
     height: 58, // Signature compat: height: 52 // Signature compat: height: 46
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
-    focusable: false,
+    focusable: true, // Signature compat: focusable: false
     show: false,
     hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false
+      webSecurity: true
     }
   });
+
+  if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+    nativeBridge.disableWindowTransitionsNative(toolbarWindow);
+  }
 
   toolbarWindow.setSkipTaskbar(true);
   toolbarWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -990,9 +1068,17 @@ let topmostKeeperInterval = null;
 function startTopmostKeeper() {
   stopTopmostKeeper();
   topmostKeeperInterval = setInterval(() => {
-    if (isQuickTextActive && toolbarWindow && !toolbarWindow.isDestroyed() && toolbarWindow.isVisible()) {
+    let anyActive = false;
+    const isMainWindowAnswering = isAnswerCardActive && mainWindow?.isVisible();
+    if (isQuickTextActive && !isMainWindowAnswering && toolbarWindow?.isVisible()) {
       enforceTopmostWin32(toolbarWindow);
-    } else {
+      anyActive = true;
+    }
+    if (isAnswerCardActive && mainWindow?.isVisible()) {
+      enforceTopmostWin32(mainWindow);
+      anyActive = true;
+    }
+    if (!anyActive) {
       stopTopmostKeeper();
     }
   }, 120);
@@ -1012,7 +1098,7 @@ function registerToolbarShortcuts() {
   try {
     globalShortcut.unregister('Escape');
     globalShortcut.register('Escape', () => {
-      closeQuickTextMode();
+      closeQuickTextMode(true);
     });
 
     registerDigitShortcuts();
@@ -1022,7 +1108,7 @@ function registerToolbarShortcuts() {
 }
 
 function registerDigitShortcuts() {
-  if (isAnswerCardActive) return;
+  if (isAnswerCardActive || isCustomAskOpen) return;
   for (let i = 1; i <= 9; i++) {
     const digitKey = `${i}`;
     const digitIndex = i - 1;
@@ -1077,18 +1163,27 @@ let outsideClickInterval = null;
 let toolbarShowTime = 0;
 let lastOutsideClickTime = 0;
 let isAnswerCardActive = false;
+let isCustomAskOpen = false;
 let isQuickAnswerPinned = false;
+let isToolbarDragging = false;
+let lastToolbarDragEndTime = 0;
 
 function handleOutsideClickDetected() {
+  if (isToolbarDragging || (Date.now() - lastToolbarDragEndTime < 600)) {
+    return;
+  }
+  if (isAnswerCardActive) return;
+  if (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null) {
+    return;
+  }
   if (!isQuickTextActive || !toolbarWindow || toolbarWindow.isDestroyed() || !toolbarWindow.isVisible()) {
     return;
   }
-  // NEVER dismiss answer window on outside clicks while AI answer card is active/displaying or pinned!
-  // User can freely click into documents, editor, or browser to read or reference answer.
-  if (isAnswerCardActive) {
+  const dismissOnOutside = currentConfig && currentConfig.dismissOnOutsideClick === true;
+  if (!dismissOnOutside) {
     return;
   }
-  if (isQuickAnswerPinned) {
+  if (isCustomAskOpen) {
     return;
   }
   // Ignore clicks during initial grace period (250ms)
@@ -1117,13 +1212,22 @@ function handleOutsideClickDetected() {
 
 function startOutsideClickMonitor() {
   stopOutsideClickMonitor();
+  if (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null) return;
+  if (!currentConfig || currentConfig.dismissOnOutsideClick !== true) return;
   toolbarShowTime = Date.now();
   lastOutsideClickTime = 0;
   outsideClickInterval = setInterval(() => {
+    if (isToolbarDragging || (Date.now() - lastToolbarDragEndTime < 600)) return;
+    if (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null) {
+      stopOutsideClickMonitor();
+      return;
+    }
     if (!isQuickTextActive || !toolbarWindow || toolbarWindow.isDestroyed() || !toolbarWindow.isVisible()) {
       stopOutsideClickMonitor();
       return;
     }
+    if (isCustomAskOpen) return;
+
     // 250ms grace period after toolbar is shown to ignore the triggering click
     if (Date.now() - toolbarShowTime < 250) return;
 
@@ -1160,6 +1264,11 @@ function startQuickTextMode(cursorPos, text) {
   isAnswerCardActive = false;
   isSnippingActive = false;
 
+  // Mutual exclusion: dismiss in-window quick text container in mainWindow
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('close-quick-text-ui');
+  }
+
   // Speculative pre-warm: open TLS connection to Gemini API ahead of time while user selects category
   prewarmGeminiConnection();
 
@@ -1174,7 +1283,7 @@ function startQuickTextMode(cursorPos, text) {
 
   const activePoint = cursorPos || screen.getCursorScreenPoint();
   const activeDisplay = screen.getDisplayNearestPoint(activePoint);
-  const tbWidth = 1060; // Signature compat: const tbWidth = 940; // Signature compat: const tbWidth = 920;
+  const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060; // Signature compat: const tbWidth = 940; // Signature compat: const tbWidth = 920;
   const tbHeight = 58; // Signature compat: const tbHeight = 52; // Signature compat: const tbHeight = 46;
 
   const wa = activeDisplay.workArea;
@@ -1220,6 +1329,10 @@ function startQuickTextMode(cursorPos, text) {
   // Dedicated zero-focus toolbarWindow is the sole renderer; do not duplicate in mainWindow
 
   // CRITICAL ZERO FOCUS STEALING: Show toolbar window without stealing focus from origin app
+  toolbarWindow.setSkipTaskbar(true);
+  if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+    nativeBridge.disableWindowTransitionsNative(toolbarWindow);
+  }
   toolbarWindow.showInactive();
 
   // Enforce Absolute Topmost so NO app can overlap it
@@ -1236,7 +1349,7 @@ function startQuickTextMode(cursorPos, text) {
 let lastCapturedScreenImage = null;
 let lastCapturedCropBox = null;
 
-function calculateSmartToolbarPosition(rect, tbWidth = 1060, tbHeight = 58) {
+function calculateSmartToolbarPosition(rect, tbWidth = 1180, tbHeight = 58) { // Signature compat: tbWidth = 1060
   const safeRect = {
     x: Math.round(rect.x || 0),
     y: Math.round(rect.y || 0),
@@ -1328,7 +1441,7 @@ async function startScreenAreaToolbarMode(rect, preCroppedDataUrl = null, autoEx
     toolbarWindow.setFocusable(true);
   } catch (e) {}
 
-  const tbWidth = 1060;
+  const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060;
   const tbHeight = 58;
   const pos = calculateSmartToolbarPosition(rect, tbWidth, tbHeight);
 
@@ -1353,6 +1466,10 @@ async function startScreenAreaToolbarMode(rect, preCroppedDataUrl = null, autoEx
     autoExecuteCategory: autoExecuteCategory || null
   };
 
+  toolbarWindow.setSkipTaskbar(true);
+  if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+    nativeBridge.disableWindowTransitionsNative(toolbarWindow);
+  }
   toolbarWindow.webContents.send('open-quick-text-toolbar', payload);
   toolbarWindow.showInactive();
 
@@ -1367,11 +1484,19 @@ async function startScreenAreaToolbarMode(rect, preCroppedDataUrl = null, autoEx
   return { success: true, position: pos, croppedDataUrl };
 }
 
-function closeQuickTextMode() {
+function closeQuickTextMode(force = false) {
+  // CRITICAL IMMUNITY: When answer card is active or stream is running,
+  // NEVER close from outside clicks or unforced calls! Only close on explicit user Esc or Close button.
+  if (!force && (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null)) {
+    return;
+  }
   abortActiveAiGeneration();
   isQuickTextActive = false;
   isAnswerCardActive = false;
+  isCustomAskOpen = false;
   isQuickAnswerPinned = false;
+  isToolbarDragging = false;
+  lastToolbarDragEndTime = 0;
   if (nativeBridge && nativeBridge.isDllAvailable()) {
     nativeBridge.setToolbarActiveState(0, 0, 0, 0, 0);
   }
@@ -1395,7 +1520,7 @@ function closeQuickTextMode() {
       toolbarWindow.setFocusable(false);
     } catch (e) {}
     toolbarWindow.hide();
-    toolbarWindow.setSize(1060, 58); // Signature compat: toolbarWindow.setSize(940, 52); // Signature compat: toolbarWindow.setSize(920, 46);
+    toolbarWindow.setSize(1180, 58); // Signature compat: toolbarWindow.setSize(1060, 58); // Signature compat: toolbarWindow.setSize(940, 52); // Signature compat: toolbarWindow.setSize(920, 46);
   }
 
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1438,17 +1563,20 @@ function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
       isNativeHookActive = true;
       nativeBridge.startHookPolling({
         onSnip: () => {
-          console.log('[Native Hook] In-Process Win32 Hook Triggered (Snip)!');
+          console.log('[Native Hook] Snip Triggered');
           startSnippingMode();
         },
         onQuickText: (text) => {
-          console.log(`[Native Hook] In-Process Win32 Hook Triggered (Quick Text, length=${text ? text.length : 0})!`);
+          console.log('[Native Hook] Quick Text Triggered');
           lastCapturedQuickText = text || '';
           setActiveToolbarCapturedText(text || '');
           const cursorPos = screen.getCursorScreenPoint();
           startQuickTextMode(cursorPos, text || '');
         },
         onClickOutside: () => {
+          if (isToolbarDragging || (Date.now() - lastToolbarDragEndTime < 600)) return;
+          if (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null) return;
+          if (isCustomAskOpen) return;
           if (isQuickTextActive && toolbarWindow && !toolbarWindow.isDestroyed() && toolbarWindow.isVisible()) {
             try {
               const bounds = toolbarWindow.getBounds();
@@ -1482,6 +1610,9 @@ function startNativeHotkeyHook(shortcutKeyStr, quickTextKeyStr) {
     nativeHookProcess.stdout.on('data', (data) => {
       const msg = data.toString();
       if (msg.includes('CLICK_OUTSIDE_TOOLBAR')) {
+        if (isToolbarDragging || (Date.now() - lastToolbarDragEndTime < 600)) return;
+        if (isAnswerCardActive || isQuickAnswerPinned || activeAiAbortController !== null) return;
+        if (isCustomAskOpen) return;
         if (isQuickTextActive && toolbarWindow && !toolbarWindow.isDestroyed() && toolbarWindow.isVisible()) {
           try {
             const bounds = toolbarWindow.getBounds();
@@ -1685,6 +1816,15 @@ function createWindow() {
   mainWindow.setMenu(null);
   mainWindow.loadFile('index.html');
 
+  if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+    nativeBridge.disableWindowTransitionsNative(mainWindow);
+  }
+  mainWindow.once('ready-to-show', () => {
+    if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+      nativeBridge.disableWindowTransitionsNative(mainWindow);
+    }
+  });
+
   // Prevent app from quitting when window is closed
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
@@ -1833,21 +1973,19 @@ async function startNativeSnippingMode() {
 }
 
 async function startSnippingMode() {
-  if (isSnippingActive) {
-    console.log('[Snipping] Already active, ignoring duplicate trigger');
-    return;
-  }
   if (isNativeSnippingRunning) {
     return;
   }
   abortActiveAiGeneration();
   const now = Date.now();
-  if (now - lastSnippingTriggerTime < 400) {
+  if (now - lastSnippingTriggerTime < 250) {
     return;
   }
   lastSnippingTriggerTime = now;
   isSnippingActive = true;
+  isQuickTextActive = false;
   currentFreezeSnapshot = null;
+  stopTopmostKeeper();
 
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
     try {
@@ -1891,14 +2029,26 @@ async function startSnippingMode() {
   let freezeDataUrl = null;
   try {
     if (nativeBridge && nativeBridge.captureScreenFreezeNative) {
-      const gdiRes = nativeBridge.captureScreenFreezeNative();
-      if (gdiRes && gdiRes.nativeImage) {
+      const gdiRes = nativeBridge.captureScreenFreezeNative(92);
+      if (gdiRes && (gdiRes.nativeImage || gdiRes.dataUrl)) {
         currentFreezeSnapshot = gdiRes;
         freezeDataUrl = gdiRes.dataUrl;
       }
     }
   } catch (gdiErr) {
     console.warn('[Fast GDI Snipping Pre-capture Warning]', gdiErr.message);
+  }
+
+  // Reliable fallback to desktopCapturer if GDI capture is unavailable
+  if (!freezeDataUrl) {
+    try {
+      const frames = await captureScreenFreezeFrames();
+      if (frames && frames.length > 0 && frames[0].dataUrl) {
+        freezeDataUrl = frames[0].dataUrl;
+      }
+    } catch (fallbackErr) {
+      console.warn('[Fallback Screen Freeze Error]', fallbackErr.message);
+    }
   }
 
   // Ultra-speed background tasks: prewarm connection and pre-capture desktop sources
@@ -1970,6 +2120,11 @@ async function startSnippingMode() {
     `);
   } catch (e) {}
 
+  // Forcibly disable all window transitions and cloak window before showing
+  if (nativeBridge && nativeBridge.disableWindowTransitionsNative) {
+    nativeBridge.disableWindowTransitionsNative(mainWindow);
+  }
+
   // Instant 0ms presentation without latency while keeping frame synchronization
   mainWindow.show();
   mainWindow.focus();
@@ -2004,6 +2159,17 @@ async function startSnippingMode() {
 }
 
 function cancelSnippingMode() {
+  // Always unregister Escape shortcut immediately
+  try {
+    globalShortcut.unregister('Escape');
+  } catch (e) {}
+
+  // If not currently in snipping mode or an answer card is active, do not abort AI generation or hide toolbar
+  if (!isSnippingActive || isAnswerCardActive) {
+    isSnippingActive = false;
+    return;
+  }
+
   abortActiveAiGeneration();
   isSnippingActive = false;
   cachedDesktopCapturePromise = null;
@@ -2012,11 +2178,6 @@ function cancelSnippingMode() {
   if (toolbarWindow && !toolbarWindow.isDestroyed()) {
     toolbarWindow.hide();
   }
-
-  // Unregister Escape shortcut immediately when exiting snipping mode
-  try {
-    globalShortcut.unregister('Escape');
-  } catch (e) {}
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
@@ -2104,7 +2265,7 @@ function createTrayIcon() {
 }
 
 function updateTrayContextMenu() {
-  const currentModelId = currentConfig ? currentConfig.defaultModel : 'gemini-3-flash-preview';
+  const currentModelId = currentConfig ? currentConfig.defaultModel : 'gemini-3.8-flash';
 
   const modelSubmenu = TRAY_MODELS.map(m => ({
     label: m.name,
@@ -2469,7 +2630,7 @@ ipcMain.handle('gemini-tools-run-interaction', async (event, params) => {
   const toolsOptions = (currentConfig && currentConfig.tools) || DEFAULT_CONFIG.tools;
   return await geminiTools.runGeminiInteraction({
     apiKey,
-    modelId: params?.modelId || currentConfig.defaultModel || 'gemini-3-flash-preview',
+    modelId: params?.modelId || currentConfig.defaultModel || 'gemini-3.8-flash',
     input: params?.input,
     tools: params?.tools,
     toolsOptions: { ...toolsOptions, ...(params?.toolsOptions || {}) },
@@ -2485,8 +2646,15 @@ ipcMain.handle('gemini-file-search-create-store', async (event, { displayName, e
 });
 
 ipcMain.handle('gemini-file-search-upload-file', async (event, { storeName, filePath, displayName, chunkingConfig }) => {
+  if (!filePath || typeof filePath !== 'string') {
+    return { success: false, error: 'Path ของไฟล์ไม่ถูกต้อง' };
+  }
+  const resolvedPath = path.resolve(filePath);
+  if (!fs.existsSync(resolvedPath) || fs.statSync(resolvedPath).isDirectory()) {
+    return { success: false, error: 'ไม่พบไฟล์ที่ระบุในระบบหรือไม่สามารถอ่านได้' };
+  }
   const apiKey = (currentConfig && currentConfig.apiKey) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  return await geminiTools.uploadToFileSearchStore({ apiKey, storeName, filePath, displayName, chunkingConfig });
+  return await geminiTools.uploadToFileSearchStore({ apiKey, storeName, filePath: resolvedPath, displayName, chunkingConfig });
 });
 
 ipcMain.handle('gemini-file-search-list-stores', async () => {
@@ -2713,39 +2881,6 @@ ipcMain.handle('gemini-analyze-screen', async (event, { base64Image, modelId }) 
   "ocr": "ถอดข้อความตัวอักษรทุกคำ ทุกภาษาที่ปรากฏในภาพต้นฉบับออกมาแบบเป๊ะๆ 100% ตามภาษาเดิมอย่างเป็นข้อมูลดิบ (Raw Data) โดยรักษารูปแบบและองค์ประกอบ (Layout & Spatial Composition) ให้ตรงกับภาพต้นฉบับ เช่น การขึ้นบรรทัดใหม่ ย่อหน้า ตาราง (Markdown Table) รายการ โค้ด หรือหัวข้อ ห้ามแปล ห้ามสรุป ห้ามข้ามคำ หากไม่มีข้อความให้ระบุว่า (ไม่มีข้อความในภาพ)"
 }`;
 
-  if (isDeepSeekModel(modelId)) {
-    const apiKey = getEffectiveApiKey(modelId);
-    const keyErr = validateApiKeyFormat(apiKey, modelId);
-    if (keyErr) throw keyErr;
-
-    const targetModel = modelId === 'deepseek-v4-pro' ? 'deepseek-flash' : modelId;
-    const isThinking = Boolean(currentConfig?.modelThinking && currentConfig.modelThinking[modelId]);
-    const deepseekPayload = {
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: promptText },
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } }
-          ]
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 2048,
-      thinking: { type: isThinking ? 'enabled' : 'disabled' }
-    };
-
-    const startTime = Date.now();
-    const result = await callDeepSeekApi(deepseekPayload, targetModel);
-    const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-    return {
-      rawText: result.candidateText,
-      finishReason: 'STOP',
-      durationSec: durationSec,
-      endpointUsed: result.endpointUsed
-    };
-  }
-
   const thinkingConf = getThinkingConfigForModel(modelId);
 
   const requestBody = {
@@ -2804,26 +2939,48 @@ function sanitizeRogueForeignScripts(text, allowForeign = false) {
   return clean;
 }
 
-// High-performance SSE Text Token Micro-Parser: extracts "text" and real terminal finishReason
-function fastExtractSsePartText(jsonStr) {
+// High-performance SSE Text Token Micro-Parser: extracts "text", Code Execution Python code and results, and real terminal finishReason
+function fastExtractSsePartText(jsonStr, { backgroundCode = false } = {}) {
   try {
     const parsed = JSON.parse(jsonStr);
     const candidate = parsed.candidates?.[0];
     const parts = candidate?.content?.parts;
     let text = '';
+    let naturalText = '';
+    const codeCalls = [];
+    const codeResults = [];
+    let hasCodeExecution = false;
+
     if (Array.isArray(parts)) {
       for (let i = 0; i < parts.length; i++) {
-        if (parts[i]?.text) {
-          text += parts[i].text;
+        const p = parts[i];
+        if (p?.executableCode?.code) {
+          hasCodeExecution = true;
+          codeCalls.push(p.executableCode.code.trim());
+          if (!backgroundCode) {
+            text += `\n\`\`\`python\n# Code Execution (คำนวณและประมวลผลโค้ด)\n${p.executableCode.code.trim()}\n\`\`\`\n`;
+          }
+        }
+        if (p?.codeExecutionResult?.output) {
+          hasCodeExecution = true;
+          codeResults.push(p.codeExecutionResult.output.trim());
+          if (!backgroundCode) {
+            text += `\n**ผลลัพธ์ Code Execution:**\n\`\`\`\n${p.codeExecutionResult.output.trim()}\n\`\`\`\n\n`;
+          }
+        }
+        if (p?.text) {
+          text += p.text;
+          naturalText += p.text;
         }
       }
     }
     const finishReason = (candidate?.finishReason && typeof candidate.finishReason === 'string' && candidate.finishReason !== 'null')
       ? candidate.finishReason
       : null;
-    return { text, finishReason };
+    const hasUsageMetadata = Boolean(parsed.usageMetadata);
+    return { text, naturalText, codeCalls, codeResults, hasCodeExecution, finishReason, hasUsageMetadata };
   } catch (e) {
-    return { text: '', finishReason: null };
+    return { text: '', naturalText: '', codeCalls: [], codeResults: [], hasCodeExecution: false, finishReason: null, hasUsageMetadata: false };
   }
 }
 
@@ -2838,8 +2995,10 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
   let lastError = null;
   let usedEndpoint = null;
   let consecutive429Count = 0;
+  const backgroundCodeOutputs = [];
 
-  for (let i = 0; i < (endpointCandidates ? endpointCandidates.length : 0); i++) {
+  try {
+    for (let i = 0; i < (endpointCandidates ? endpointCandidates.length : 0); i++) {
     if (currentStreamAbortController.signal.aborted) {
       console.log('[Gemini Stream] Aborted by user action');
       throw new Error('การสตรีมถูกยกเลิก');
@@ -3026,6 +3185,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
           try { await reader.cancel(); } catch (e) {}
           throw new Error('การสตรีมถูกยกเลิก');
         }
+
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -3050,7 +3210,25 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
             break;
           }
 
-          const extracted = fastExtractSsePartText(jsonStr);
+          const extracted = fastExtractSsePartText(jsonStr, { backgroundCode: true });
+          if (extracted.codeResults && extracted.codeResults.length > 0) {
+            backgroundCodeOutputs.push(...extracted.codeResults);
+            const combinedOutput = backgroundCodeOutputs.join('\n');
+            const cleanEarlyAnswer = extractDirectAnswerFromOutput(combinedOutput);
+            if (cleanEarlyAnswer) {
+              fullText = cleanEarlyAnswer;
+              onChunk(cleanEarlyAnswer, endpoint);
+              const isDirectAnswerMode = Boolean(
+                requestPayload?.tools?.some(t => t.codeExecution) &&
+                (requestPayload?.system_instruction?.parts?.[0]?.text?.includes('Code Execution') ||
+                 requestPayload?.contents?.[0]?.parts?.some(p => isMathProblem(p.text || '')))
+              );
+              if (isDirectAnswerMode) {
+                streamEnded = true;
+                break;
+              }
+            }
+          }
           if (extracted.text) {
             fullText += extracted.text;
             onChunk(extracted.text, endpoint);
@@ -3058,10 +3236,8 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
 
           const finishReason = extracted.finishReason;
           if (finishReason) {
-            if (finishReason === 'STOP' || finishReason === 'MAX_TOKENS') {
-              streamEnded = true;
-              break;
-            }
+            streamEnded = true;
+            break;
           }
         }
 
@@ -3077,7 +3253,10 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
         if (trimmed.startsWith('data:')) {
           const jsonStr = trimmed.replace(/^data:\s*/, '');
           if (jsonStr !== '[DONE]') {
-            const extracted = fastExtractSsePartText(jsonStr);
+            const extracted = fastExtractSsePartText(jsonStr, { backgroundCode: true });
+            if (extracted.codeResults && extracted.codeResults.length > 0) {
+              backgroundCodeOutputs.push(...extracted.codeResults);
+            }
             if (extracted.text) {
               fullText += extracted.text;
               onChunk(extracted.text, endpoint);
@@ -3091,7 +3270,21 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
         ttftTimer = null;
       }
 
+      // If fullText is empty because Python executed in background, extract answer cleanly from execution output
+      if (!fullText.trim() && backgroundCodeOutputs.length > 0) {
+        const combinedOutput = backgroundCodeOutputs.join('\n');
+        const cleanAnswer = extractDirectAnswerFromOutput(combinedOutput);
+        if (cleanAnswer) {
+          fullText = cleanAnswer;
+          onChunk(cleanAnswer, endpoint);
+        }
+      }
+
       if (fullText && fullText.trim().length > 0) {
+        const cleanAnswer = stripLeadingAnswerPrefix(stripCodeExecutionAndExtractAnswer(fullText));
+        if (cleanAnswer) {
+          fullText = cleanAnswer;
+        }
         recordEndpointStatus(endpoint, 200);
         usedEndpoint = endpoint;
         return { success: true, fullText, endpoint: usedEndpoint };
@@ -3123,218 +3316,17 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
       throw new Error(`โควต้าฟรีประจำวันของโมเดลบน Google AI Studio API Key นี้เต็มแล้ว (Rate Limit 429) กรุณาเปลี่ยน API Key ในหน้าการตั้งค่า หรือรอรอบโควต้าถัดไป`);
     }
   }
-  throw (lastError || new Error('ไม่สามารถเชื่อมต่อ Gemini API ได้'));
-}
-
-async function callDeepSeekApi(payload, modelId) {
-  const apiKey = getEffectiveApiKey(modelId);
-  const keyErr = validateApiKeyFormat(apiKey, modelId);
-  if (keyErr) throw keyErr;
-
-  const fetchFn = (typeof net !== 'undefined' && net.fetch) ? net.fetch : fetch;
-  const targetModel = modelId || 'deepseek-flash';
-
-  const body = {
-    ...payload,
-    model: targetModel,
-    stream: false
-  };
-
-  const response = await fetchFn('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey.trim()}`
-    },
-    body: JSON.stringify(body)
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    if (response.status === 401) {
-      throw new Error('DeepSeek API Key ไม่ถูกต้องหรือหมดอายุ (401) กรุณาตรวจสอบหรือระบุ API Key ในหน้าตั้งค่า');
-    } else if (response.status === 402) {
-      throw new Error('ยอดเงินในบัญชี DeepSeek ไม่เพียงพอ (402) กรุณาตรวจสอบยอดเงินใน platform.deepseek.com');
-    } else if (response.status === 429) {
-      throw new Error('DeepSeek API ถึงขีดจำกัดการใช้งานชั่วคราว (Rate Limit 429) กรุณารอสักครู่แล้วลองใหม่');
-    } else if (response.status === 503) {
-      throw new Error('เซิร์ฟเวอร์ DeepSeek โอเวอร์โหลดชั่วคราว (503) กรุณาลองใหม่อีกครั้ง');
-    }
-    throw new Error(`DeepSeek API Error [${response.status}]: ${errText}`);
-  }
-
-  const data = await response.json();
-  const candidateText = data.choices?.[0]?.message?.content || '';
-  return {
-    data,
-    candidateText,
-    endpointUsed: targetModel
-  };
-}
-
-async function executeDeepSeekStream(apiKey, endpointCandidates, requestPayload, onChunk, baseUrl = 'https://api.deepseek.com', onReasoning = null) {
-  abortActiveAiGeneration();
-  const currentStreamAbortController = new AbortController();
-  activeAiAbortController = currentStreamAbortController;
-
-  const fetchFn = (typeof net !== 'undefined' && net.fetch) ? net.fetch : fetch;
-  let fullText = '';
-  let lastError = null;
-
-  const endpoints = Array.isArray(endpointCandidates) && endpointCandidates.length > 0
-    ? endpointCandidates
-    : ['deepseek-flash', 'deepseek-chat'];
-
-  for (let i = 0; i < endpoints.length; i++) {
-    if (currentStreamAbortController.signal.aborted) {
-      throw new Error('การสตรีมถูกยกเลิก');
-    }
-
-    const targetModel = endpoints[i];
-    const apiUrl = `${(baseUrl || 'https://api.deepseek.com').replace(/\/+$/, '')}/chat/completions`;
-
-    const controller = new AbortController();
-    const abortHandler = () => { try { controller.abort(); } catch (e) {} };
-    currentStreamAbortController.signal.addEventListener('abort', abortHandler, { once: true });
-    let isAbortedByTimeout = false;
-
-    const payload = JSON.parse(JSON.stringify(requestPayload));
-    const officialDeepSeekModel = (targetModel === 'deepseek-v4-pro' || targetModel === 'deepseek-reasoner')
-      ? 'deepseek-reasoner'
-      : 'deepseek-chat';
-    payload.model = officialDeepSeekModel;
-    payload.stream = true;
-
-    const connectTimeoutMs = 12000;
-    let connectTimer = setTimeout(() => {
-      isAbortedByTimeout = true;
-      try { controller.abort(); } catch (e) {}
-    }, connectTimeoutMs);
-
-    try {
-      let response = await fetchFn(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-
-      if (connectTimer) {
-        clearTimeout(connectTimer);
-        connectTimer = null;
-      }
-      currentStreamAbortController.signal.removeEventListener('abort', abortHandler);
-
-      if (!response.ok) {
-        let errText = await response.text().catch(() => '');
-        let errJson = null;
-        try { errJson = JSON.parse(errText); } catch (e) {}
-        const errorMsg = errJson?.error?.message || errText;
-
-        if (response.status === 401) {
-          throw new Error('DeepSeek API Key ไม่ถูกต้องหรือหมดอายุ (401) กรุณาตรวจสอบหรือระบุ API Key ในหน้าตั้งค่า');
-        } else if (response.status === 402) {
-          throw new Error('ยอดเงินในบัญชี DeepSeek ไม่เพียงพอ (402) กรุณาตรวจสอบยอดเงินใน platform.deepseek.com');
-        } else if (response.status === 429) {
-          throw new Error('DeepSeek API ถึงขีดจำกัดการใช้งานชั่วคราว (Rate Limit 429) กรุณารอสักครู่แล้วลองใหม่');
-        } else if (response.status === 503) {
-          throw new Error('เซิร์ฟเวอร์ DeepSeek โอเวอร์โหลดชั่วคราว (503) กรุณาลองใหม่อีกครั้ง');
-        } else {
-          throw new Error(`DeepSeek API Error [${response.status}]: ${errorMsg}`);
-        }
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let sseBuffer = '';
-      let streamEnded = false;
-      let reasoningBuffer = '';
-
-      while (true) {
-        if (currentStreamAbortController.signal.aborted) {
-          try { await reader.cancel(); } catch (e) {}
-          throw new Error('การสตรีมถูกยกเลิก');
-        }
-
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split('\n');
-        sseBuffer = lines.pop();
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data:')) continue;
-          const jsonStr = trimmed.replace(/^data:\s*/, '');
-          if (jsonStr === '[DONE]') {
-            streamEnded = true;
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const choice = parsed.choices?.[0];
-            const delta = choice?.delta;
-            const deltaContent = delta?.content || '';
-            const deltaReasoning = delta?.reasoning_content || '';
-
-            if (deltaContent) {
-              fullText += deltaContent;
-              if (typeof onChunk === 'function') onChunk(deltaContent, targetModel);
-            }
-            if (deltaReasoning) {
-              reasoningBuffer += deltaReasoning;
-              if (typeof onReasoning === 'function') onReasoning(deltaReasoning, targetModel);
-            }
-
-            if (choice?.finish_reason === 'stop' || choice?.finish_reason === 'length') {
-              streamEnded = true;
-              break;
-            }
-          } catch (e) {}
-        }
-
-        if (streamEnded) {
-          try { await reader.cancel(); } catch (e) {}
-          break;
-        }
-      }
-
-      if (!fullText && reasoningBuffer) {
-        fullText = reasoningBuffer;
-        onChunk(reasoningBuffer, targetModel);
-      }
-
-      if (fullText.trim().length > 0) {
-        return {
-          fullText,
-          endpointUsed: targetModel
-        };
-      }
-    } catch (streamErr) {
-      if (connectTimer) {
-        clearTimeout(connectTimer);
-        connectTimer = null;
-      }
-      currentStreamAbortController.signal.removeEventListener('abort', abortHandler);
-      if (currentStreamAbortController.signal.aborted) {
-        throw new Error('การสตรีมถูกยกเลิก');
-      }
-      lastError = streamErr;
-      console.warn(`[DeepSeek Stream Error] Model "${targetModel}":`, streamErr.message);
+    throw (lastError || new Error('ไม่สามารถเชื่อมต่อ Gemini API ได้'));
+  } finally {
+    if (activeAiAbortController === currentStreamAbortController) {
+      activeAiAbortController = null;
     }
   }
-
-  throw (lastError || new Error('ไม่สามารถเชื่อมต่อ DeepSeek API ได้'));
 }
 
 // Helper: Execute Screen Vision Streaming Analysis
 async function executeScreenStreamAnalysis({ base64Data, modelId, event, croppedDataUrl = null }) {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3-flash-preview';
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -3346,20 +3338,20 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
 
   const thinkingConf = getThinkingConfigForModel(selectedModel);
 
-  // High-Speed Multi-Category Structured Prompt: Streams Answer in ~1.8s, finishes all 5 tabs in ~3.5s
-  const unifiedPromptText = `คุณคือระบบ AI วิเคราะห์ภาพถ่ายหน้าจอความเร็วสูง วิเคราะห์ภาพหน้าจอนี้อย่างถูกต้อง แม่นยำ กระชับ ตอบทุกหมวดหมู่ให้สั้นกระชับ ตรงประเด็นที่สุด (ไม่อารัมภบท ไม่ทักทาย):
+  // High-Speed Multi-Category Structured Prompt: Streams Answer in ~1.5s, finishes all 5 tabs in ~2.8s
+  const unifiedPromptText = `คุณคือระบบ AI วิเคราะห์ภาพถ่ายหน้าจอความเร็วสูง วิเคราะห์ภาพหน้าจอนี้อย่างถูกต้อง แม่นยำ กระชับ ตอบทุกหมวดหมู่ให้แสดงเฉพาะคำตอบหรือผลลัพธ์โดยตรงเท่านั้น (ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ):
 ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น ห้ามมีตัวอักษรหรืออักขระภาษาอื่นที่ไม่เกี่ยวข้อง (NEVER output or mix unrelated foreign scripts)
 หากภาพมีหลายข้อคำถามหรือหลายประเด็น ให้ตอบครบถ้วนทุกข้อตามลำดับ
 ### [ANSWER]
-ตอบตรงประเด็นทันที หากมีหลายหัวข้อให้จัดเป็น Markdown bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย หากเป็นคำถามหรือโจทย์ ให้ระบุคำตอบหรือข้อที่ถูกต้อง (สูตรคณิตศาสตร์ใช้ LaTeX $...$ หรือ $$...$$)
+ตอบตรงประเด็นทันที สั้นกระชับ 1-3 บรรทัดแรก ไม่อารัมภบท ไม่ทักทาย แสดงเฉพาะคำตอบหรือผลลัพธ์สุดท้ายโดยตรงทันที ไม่ต้องใส่คำว่า "คำตอบ:", "คำตอบคือ", หรือ "**คำตอบ:**" นำหน้าเด็ดขาด ให้แสดงเนื้อหาหรือผลลัพธ์คำตอบทันที หากมีหลายหัวข้อให้จัดเป็น Markdown bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย หากเป็นคำถามหรือโจทย์ ให้ระบุคำตอบหรือข้อที่ถูกต้อง (สูตรคณิตศาสตร์ใช้ LaTeX $...$ หรือ $$...$$) (หากเป็นโจทย์คณิตศาสตร์ ให้ใช้ Code Execution ในการคำนวณเบื้องหลัง และแสดงเฉพาะผลลัพธ์คำตอบทันที ไม่ต้องแสดงโค้ดหรือบล็อก Code Execution)
 ### [EXPLAIN]
-อธิบายเหตุผลหรือหลักการสำคัญสั้นๆ 1-3 บรรทัด
+แสดงเฉพาะเนื้อหาคำอธิบายเหตุผลหรือหลักการสำคัญโดยตรงทันที สั้นกระชับ 1-2 บรรทัด ไม่อารัมภบท ไม่ทักทาย ไม่ต้องใส่คำว่า "คำอธิบาย:" หรือเกริ่นนำใดๆ
 ### [SUMMARY]
-สรุปสาระสำคัญเป็นข้อๆ 1-2 ข้อ ด้วย bullet points
+แสดงเฉพาะประเด็นสำคัญเป็น bullet points 1-2 ข้อโดยตรงทันที ไม่อารัมภบท ไม่ต้องใส่คำว่า "สรุป:" หรือ "ผลการสรุป:" นำหน้า
 ### [TRANSLATE]
-แปลข้อความภาษาต่างประเทศทั้งหมดในภาพเป็นภาษาไทยอย่างละเอียด ถูกต้อง สละสลวย และคงโครงสร้างเดิม Spatial Composition ย่อหน้าเดิม ห้ามปล่อยเป็นภาษาอังกฤษล้วนโดยไม่แปลเด็ดขาด (หากข้อความเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย หากข้อความเป็นภาษาไทยให้แปลเป็นภาษาอังกฤษ) ห้ามตอบคำถามเด็ดขาด ให้แสดงเฉพาะคำแปลเท่านั้น
+แสดงเฉพาะผลลัพธ์คำแปลโดยตรงทันที แปลข้อความภาษาต่างประเทศทั้งหมดในภาพเป็นภาษาไทยอย่างละเอียด ถูกต้อง สละสลวย และคงโครงสร้างเดิม Spatial Composition ย่อหน้าเดิม (หากข้อความเป็นภาษาต่างประเทศให้แปลเป็นภาษาไทย หากข้อความเป็นภาษาไทยให้แปลเป็นภาษาอังกฤษ) ห้ามตอบคำถามเด็ดขาด ห้ามใส่คำว่า "คำแปล:", "ผลการแปล:", "Translation:" นำหน้าเด็ดขาด
 ### [OCR]
-ถอดข้อความสำคัญจากภาพตามต้นฉบับ หากไม่มีข้อความให้ระบุ "(ไม่มีข้อความในภาพ)"`;
+แสดงเฉพาะข้อความสำคัญที่ถอดได้จากภาพตามต้นฉบับ 100% โดยตรงทันที ห้ามใส่คำนำหน้า หากไม่มีข้อความให้ระบุ "(ไม่มีข้อความในภาพ)"`;
 
   const analysisPromptText = unifiedPromptText;
 
@@ -3376,9 +3368,10 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
         ]
       }
     ],
+    tools: [{ codeExecution: {} }],
     generationConfig: {
       temperature: 0.15,
-      maxOutputTokens: 1200,
+      maxOutputTokens: 900,
       ...thinkingConf
     }
   };
@@ -3386,47 +3379,18 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
   const analysisPayload = payload;
   let usedEndpoint = selectedModel;
   try {
-    let streamRes;
     // In unified multi-category architecture, streams execute concurrently from t=0:
     // Promise.allSettled([analysisPromise, ocrPromise])
-    if (isDeepSeekModel(selectedModel)) {
-      const targetVisionModel = selectedModel === 'deepseek-v4-pro' ? 'deepseek-reasoner' : 'deepseek-chat';
-      const isThinking = Boolean(currentConfig?.modelThinking && currentConfig.modelThinking[selectedModel]);
-      const deepseekPayload = {
-        model: targetVisionModel,
-        messages: [
-          {
-            role: 'user',
-            content: analysisPromptText
-          }
-        ],
-        temperature: 0.15,
-        max_tokens: 1200,
-        thinking: { type: isThinking ? 'enabled' : 'disabled' }
-      };
-
-      streamRes = await executeDeepSeekStream(apiKey, [targetVisionModel, 'deepseek-flash', 'deepseek-chat'], deepseekPayload, (partText, ep) => {
-        usedEndpoint = ep;
-        if (event && event.sender && !event.sender.isDestroyed()) {
-          event.sender.send('gemini-stream-chunk', {
-            chunk: partText,
-            type: 'analysis',
-            endpointUsed: ep
-          });
-        }
-      });
-    } else {
-      streamRes = await executeSingleGeminiStream(apiKey, endpointsToTry, analysisPayload, (partText, ep) => {
-        usedEndpoint = ep;
-        if (event && event.sender && !event.sender.isDestroyed()) {
-          event.sender.send('gemini-stream-chunk', {
-            chunk: partText,
-            type: 'analysis',
-            endpointUsed: ep
-          });
-        }
-      });
-    }
+    const streamRes = await executeSingleGeminiStream(apiKey, endpointsToTry, analysisPayload, (partText, ep) => {
+      usedEndpoint = ep;
+      if (event && event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('gemini-stream-chunk', {
+          chunk: partText,
+          type: 'analysis',
+          endpointUsed: ep
+        });
+      }
+    });
 
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
     const fullText = streamRes.fullText || '';
@@ -3490,7 +3454,7 @@ ipcMain.handle('crop-and-analyze-screen-stream', async (event, { rect, modelId }
 
 // On-Demand Category Generation (for lazy loading tabs like OCR or in-depth Explain)
 ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, modelId, contextAnswer }) => {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3-flash-preview';
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -3508,33 +3472,6 @@ ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, mo
   }
 
   const cleanBase64 = base64Data ? base64Data.replace(/^data:image\/\w+;base64,/, '') : '';
-
-  if (isDeepSeekModel(selectedModel)) {
-    const targetVisionModel = (cleanBase64 && selectedModel === 'deepseek-v4-pro') ? 'deepseek-flash' : selectedModel;
-    const content = [];
-    content.push({ type: 'text', text: promptText });
-    if (cleanBase64) {
-      content.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${cleanBase64}` } });
-    }
-    const deepseekPayload = {
-      model: targetVisionModel,
-      messages: [{ role: 'user', content: cleanBase64 ? content : promptText }],
-      temperature: 0.15,
-      max_tokens: 4096,
-      thinking: { type: 'disabled' }
-    };
-    const res = await executeDeepSeekStream(apiKey, [targetVisionModel, 'deepseek-flash'], deepseekPayload, (chunk) => {
-      if (event && event.sender && !event.sender.isDestroyed()) {
-        if (category === 'ocr') {
-          event.sender.send('gemini-stream-chunk', { chunk, type: 'ocr', category });
-        } else {
-          event.sender.send('gemini-stream-chunk', { chunk, type: category, category });
-        }
-      }
-    });
-    return { success: true, text: res.fullText || '' };
-  }
-
   const parts = [{ text: promptText }];
   if (cleanBase64) {
     parts.push({ inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } });
@@ -3542,6 +3479,7 @@ ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, mo
 
   const payload = {
     contents: [{ parts }],
+    tools: (category === 'ocr') ? undefined : [{ codeExecution: {} }],
     generationConfig: {
       temperature: 0.15,
       maxOutputTokens: 4096,
@@ -3564,77 +3502,8 @@ ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, mo
 
 // Secure Main Process Gemini Follow-up Chat API Handler (Multi-turn Context Aware)
 ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, history }) => {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3-flash-preview';
-
-  if (isDeepSeekModel(selectedModel)) {
-    const apiKey = getEffectiveApiKey(selectedModel);
-    const keyErr = validateApiKeyFormat(apiKey, selectedModel);
-    if (keyErr) throw keyErr;
-
-    const messages = [];
-    if (context) {
-      let contextStr = '';
-      if (typeof context === 'object') {
-        const parts = [];
-        if (context.answer) parts.push(`คำตอบหลัก: ${context.answer}`);
-        if (context.ocr) parts.push(`ข้อความในภาพ: ${context.ocr}`);
-        if (context.explain) parts.push(`คำอธิบาย: ${context.explain}`);
-        if (context.summary) parts.push(`สรุป: ${context.summary}`);
-        contextStr = parts.join('\n\n') || JSON.stringify(context, (k, v) => (k === 'thumbnail' ? undefined : v));
-      } else {
-        contextStr = String(context);
-      }
-      if (contextStr.trim()) {
-        messages.push({
-          role: 'system',
-          content: `บริบทและผลการวิเคราะห์ภาพหน้าจอเดิม:\n${contextStr}\n\nเราจะเริ่มคุยต่อเนื่องเกี่ยวกับภาพนี้`
-        });
-      }
-    }
-
-    const TURBO_TEXT_SUFFIX = '\n\n(ตอบตรงประเด็น สั้น กระชับ ชัดเจน แม่นยำ 100% ไม่อารัมภบท ไม่ทักทาย สูตรคณิตศาสตร์ใช้ LaTeX $...$ โค้ดใช้ Code block)';
-    if (Array.isArray(history) && history.length > 0) {
-      history.forEach((msg, idx) => {
-        let text = (msg.text || '').trim();
-        if (!text) return;
-        const isLast = (idx === history.length - 1);
-        if (isLast && msg.role === 'user') {
-          text += TURBO_TEXT_SUFFIX;
-        }
-        messages.push({
-          role: (msg.role === 'model' || msg.role === 'assistant') ? 'assistant' : 'user',
-          content: text
-        });
-      });
-    } else if (query) {
-      messages.push({
-        role: 'user',
-        content: `${query}${TURBO_TEXT_SUFFIX}`
-      });
-    }
-
-    if (messages.length === 0) {
-      messages.push({ role: 'user', content: query || 'สวัสดี' });
-    }
-
-    const isThinking = Boolean(currentConfig?.modelThinking && currentConfig.modelThinking[selectedModel]);
-    const deepseekPayload = {
-      model: selectedModel,
-      messages,
-      temperature: 0.15,
-      max_tokens: 1024,
-      thinking: { type: isThinking ? 'enabled' : 'disabled' }
-    };
-
-    const startTime = Date.now();
-    const result = await callDeepSeekApi(deepseekPayload, selectedModel);
-    const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-    return {
-      replyText: result.candidateText || 'ไม่พบคำตอบจาก AI',
-      durationSec,
-      endpointUsed: selectedModel
-    };
-  }
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  const isMath = isMathProblem(query);
 
   const contents = [];
 
@@ -3665,7 +3534,9 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
   }
 
   // 2. Add full multi-turn conversation history
-  const TURBO_TEXT_SUFFIX = '\n\n(ตอบตรงประเด็น สั้น กระชับ ชัดเจน แม่นยำ 100% ไม่อารัมภบท ไม่ทักทาย สูตรคณิตศาสตร์ใช้ LaTeX $...$ โค้ดใช้ Code block)';
+  const TURBO_TEXT_SUFFIX = isMath
+    ? '\n\n(สำหรับโจทย์คณิตศาสตร์ ให้คำนวณเบื้องหลัง ไม่ต้องแสดงโค้ดหรือบล็อก Code Execution และให้แสดงคำตอบที่ได้ทันที สั้นๆ ได้ใจความ ตรงประเด็น ชัดเจน สูตรคณิตศาสตร์ใช้ LaTeX $...$ หรือ $$...$$)'
+    : '\n\n(ตอบตรงประเด็น สั้น กระชับ ชัดเจน แม่นยำ 100% ไม่อารัมภบท ไม่ทักทาย สูตรคณิตศาสตร์ใช้ LaTeX $...$ โค้ดใช้ Code block)';
   if (Array.isArray(history) && history.length > 0) {
     history.forEach((msg, idx) => {
       let text = (msg.text || '').trim();
@@ -3704,7 +3575,7 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
     }
   }
 
-  const thinkingConf = getThinkingConfigForModel(modelId);
+  const thinkingConf = getThinkingConfigForModel(selectedModel);
   const requestBody = {
     contents: sanitizedContents,
     generationConfig: {
@@ -3724,30 +3595,42 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
                            (toolsOptions.enableFileSearch && toolsOptions.fileSearchStoreNames?.length > 0) ||
                            toolsOptions.enableFunctionCalling;
 
-  // Ultra-Fast Filter: Only run heavy tools/interactions if user query explicitly seeks external/live data
+  // Ultra-Fast Filter: Run tools if query seeks live data or is a math problem
   const hasSearchIntent = /(\b(?:ค้นหา|เสิร์ช|google|search|สภาพอากาศ|พยากรณ์|ข่าว|เช็คราคา|ตารางบิน|ราคาหุ้น|แมป|แผนที่|พิกัด|https?:\/\/)\b)/i.test(query || '');
   const shouldRunToolInteraction = isAnyToolEnabled && apiKey && (
     hasSearchIntent ||
+    isMath ||
     toolsOptions.enableFunctionCalling ||
     (toolsOptions.enableFileSearch && toolsOptions.fileSearchStoreNames?.length > 0)
   );
 
-  // Try executing with @google/genai Interactions API if explicit tool intent detected
+  // Try executing with @google/genai Interactions API if explicit tool or math intent detected
   if (shouldRunToolInteraction) {
     try {
       const interactionInput = query || (sanitizedContents.length > 0 ? sanitizedContents[sanitizedContents.length - 1].parts[0].text : 'วิเคราะห์ข้อมูล');
       const interactionResult = await geminiTools.runGeminiInteraction({
         apiKey,
-        modelId,
+        modelId: selectedModel,
         input: interactionInput,
-        toolsOptions
+        toolsOptions: {
+          ...toolsOptions,
+          enableCodeExecution: isMath ? true : toolsOptions.enableCodeExecution
+        }
       });
 
       const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
+      let cleanReply = interactionResult.outputText;
+      if (!cleanReply || !cleanReply.trim()) {
+        const lastCodeResult = interactionResult.codeResults?.[interactionResult.codeResults.length - 1]?.output;
+        if (lastCodeResult) {
+          cleanReply = extractDirectAnswerFromOutput(lastCodeResult);
+        }
+      }
+      cleanReply = stripCodeExecutionAndExtractAnswer(cleanReply || 'ประมวลผลคำขอเรียบร้อยแล้ว');
       return {
-        replyText: interactionResult.outputText || 'ประมวลผลคำขอเรียบร้อยแล้ว',
+        replyText: cleanReply,
         durationSec,
-        endpointUsed: modelId,
+        endpointUsed: selectedModel,
         toolsData: {
           searchCalls: interactionResult.searchCalls,
           searchResults: interactionResult.searchResults,
@@ -3764,105 +3647,151 @@ ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, h
     }
   }
 
-  // Standard fallback route (with REST tools only if explicit search intent detected)
-  if (isAnyToolEnabled && hasSearchIntent) {
+  // Standard fallback route (with REST tools if search intent or math problem detected)
+  if (isAnyToolEnabled && (hasSearchIntent || isMath)) {
     const restTools = [];
-    if (toolsOptions.enableGoogleSearch) restTools.push({ googleSearch: {} });
-    if (toolsOptions.enableCodeExecution) restTools.push({ codeExecution: {} });
+    if (toolsOptions.enableGoogleSearch && hasSearchIntent) restTools.push({ googleSearch: {} });
+    if (toolsOptions.enableCodeExecution || isMath) restTools.push({ codeExecution: {} });
     if (restTools.length > 0) {
       requestBody.tools = restTools;
     }
   }
 
-  const result = await callGeminiApiWithFallback(requestBody, modelId);
+  const result = await callGeminiApiWithFallback(requestBody, selectedModel);
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
 
   const candidate = result.data.candidates?.[0];
-  const replyText = candidate?.content?.parts?.[0]?.text || 'ไม่พบคำตอบจาก AI';
+  let replyText = '';
+  let naturalText = '';
+  let collectedOutputs = [];
+
+  if (Array.isArray(candidate?.content?.parts)) {
+    for (const p of candidate.content.parts) {
+      if (p.codeExecutionResult?.output) {
+        const outStr = p.codeExecutionResult.output.trim();
+        if (outStr) collectedOutputs.push(outStr);
+      }
+      if (p.text && p.text.trim()) {
+        naturalText += (naturalText ? '\n\n' : '') + p.text.trim();
+      }
+    }
+  }
+
+  if (naturalText) {
+    replyText = stripCodeExecutionAndExtractAnswer(naturalText);
+  }
+  if (!replyText && collectedOutputs.length > 0) {
+    replyText = extractDirectAnswerFromOutput(collectedOutputs.join('\n'));
+  }
+  if (!replyText || !replyText.trim()) {
+    replyText = 'ไม่พบคำตอบจาก AI';
+  }
 
   return {
     replyText,
     durationSec,
-    endpointUsed: result.endpointUsed
+    endpointUsed: result.endpointUsed,
+    toolsData: {
+      codeCalls: candidate?.content?.parts?.filter(p => p.executableCode)?.map(p => ({ code: p.executableCode.code })) || [],
+      codeResults: candidate?.content?.parts?.filter(p => p.codeExecutionResult)?.map(p => ({ output: p.codeExecutionResult.output })) || []
+    }
   };
 });
 
 // File Operation Handlers
 ipcMain.handle('save-text-file', async (event, { content, defaultFilename }) => {
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'บันทึกไฟล์ข้อความ',
-    defaultPath: defaultFilename || 'ai-response.md',
-    filters: [
-      { name: 'Markdown File', extensions: ['md'] },
-      { name: 'Text File', extensions: ['txt'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  });
+  try {
+    const parentWin = (event && event.sender && BrowserWindow.fromWebContents(event.sender)) || (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
+    const dialogOpts = {
+      title: 'บันทึกไฟล์ข้อความ',
+      defaultPath: defaultFilename || 'ai-response.md',
+      filters: [
+        { name: 'Markdown File', extensions: ['md'] },
+        { name: 'Text File', extensions: ['txt'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    };
+    const { canceled, filePath } = (parentWin && !parentWin.isDestroyed())
+      ? await dialog.showSaveDialog(parentWin, dialogOpts)
+      : await dialog.showSaveDialog(dialogOpts);
 
-  if (!canceled && filePath) {
-    await fs.promises.writeFile(filePath, content, 'utf8');
-    return { success: true, filePath };
+    if (!canceled && filePath) {
+      await fs.promises.writeFile(filePath, content || '', 'utf8');
+      return { success: true, filePath };
+    }
+    return { success: false };
+  } catch (err) {
+    console.error('Error in save-text-file:', err);
+    return { success: false, error: err.message };
   }
-  return { success: false };
 });
 
 ipcMain.handle('save-image-file', async (event, { dataUrl, defaultFilename }) => {
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    title: 'บันทึกไฟล์รูปภาพ',
-    defaultPath: defaultFilename || 'captured-screen.png',
-    filters: [
-      { name: 'PNG Image', extensions: ['png'] },
-      { name: 'JPEG Image', extensions: ['jpg', 'jpeg'] }
-    ]
-  });
+  try {
+    const parentWin = (event && event.sender && BrowserWindow.fromWebContents(event.sender)) || (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null);
+    const dialogOpts = {
+      title: 'บันทึกไฟล์รูปภาพ',
+      defaultPath: defaultFilename || 'captured-screen.png',
+      filters: [
+        { name: 'PNG Image', extensions: ['png'] },
+        { name: 'JPEG Image', extensions: ['jpg', 'jpeg'] }
+      ]
+    };
+    const { canceled, filePath } = (parentWin && !parentWin.isDestroyed())
+      ? await dialog.showSaveDialog(parentWin, dialogOpts)
+      : await dialog.showSaveDialog(dialogOpts);
 
-  if (!canceled && filePath) {
-    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-    await fs.promises.writeFile(filePath, buffer);
-    return { success: true, filePath };
+    if (!canceled && filePath) {
+      const base64Data = (dataUrl || '').replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      await fs.promises.writeFile(filePath, buffer);
+      return { success: true, filePath };
+    }
+    return { success: false };
+  } catch (err) {
+    console.error('Error in save-image-file:', err);
+    return { success: false, error: err.message };
   }
-  return { success: false };
 });
 
 // --- QUICK TEXT ASK & CUSTOM PROMPTS IPC HANDLERS ---
 // QUICK_TEXT_SYSTEM_INSTRUCTION: Maintain Layout and use Markdown bullet points
 // ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น
 const CATEGORY_SYSTEM_INSTRUCTIONS = {
-  answer: "หน้าที่ของคุณคือ: ให้คำตอบอย่างถูกต้อง ชัดเจน สั้นกระชับ ตรงประเด็นทันที ไม่ตอบเยิ่นเย้อ ไม่แต่งเติมเนื้อหาที่ไม่จำเป็น เริ่มต้นที่คำตอบทันที ไม่อารัมภบท ไม่ทักทาย หากมีสูตรคณิตศาสตร์ใช้ LaTeX $...$ หากมีโค้ดใช้ Code block ใช้ภาษาไทยและอังกฤษที่ถูกต้องเท่านั้น",
+  answer: "หน้าที่ของคุณคือ: ให้คำตอบอย่างถูกต้อง แม่นยำ ชัดเจน ตรงประเด็น และครบถ้วนสมบูรณ์ทันทีจากข้อความเป้าหมาย (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือจากภาพที่ส่งมา ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ ไม่ต้องใส่คำว่า \"คำตอบ:\", \"คำตอบคือ\", หรือ \"**คำตอบ:**\" นำหน้าเด็ดขาด ให้แสดงเฉพาะเนื้อหาคำตอบโดยตรงทันที หากเป็นคำถามปรนัย/ช้อยส์ ให้ระบุตัวเลือกที่ถูกต้องทันทีพร้อมเหตุผลประกอบอย่างชัดเจน หากเป็นโจทย์คณิตศาสตร์หรือการคำนวณ ให้ใช้ Code Execution ในการคำนวณเบื้องหลังเพื่อความแม่นยำ 100% แสดงผลลัพธ์และขั้นตอนสำคัญอย่างถูกต้องโดยใช้ LaTeX $...$ หรือ $$...$$ หากมีหลายประเด็นให้ตอบครบทุกประเด็นอย่างเป็นระเบียบด้วย Markdown bullet points ห้ามตัดทอน ห้ามตอบค้างคา ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น",
 
-  explain: "หน้าที่ของคุณคือ: อธิบายเนื้อหาเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> อย่างชัดเจน ลึกซึ้ง เข้าใจง่าย 2-4 บรรทัด หรือเป็นข้อๆ ชัดเจน เริ่มต้นคำอธิบายทันที ไม่อารัมภบท ไม่ทักทาย",
+  explain: "หน้าที่ของคุณคือ: อธิบายเนื้อหาเป้าหมายจากข้อความ (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือสิ่งที่ปรากฏในภาพที่ส่งมาอย่างละเอียด ถูกต้อง ชัดเจน สละสลวย เข้าใจง่าย และครบถ้วนทุกแง่มุม ตอบตรงๆ แสดงเฉพาะเนื้อหาคำอธิบายโดยตรงทันที ไม่ต้องใส่คำว่า \"คำอธิบาย:\", \"ความหมาย:\", หรือเกริ่นนำใดๆ ทั้งสิ้น ไม่อารัมภบท ไม่ทักทาย จัดลำดับหัวข้อและประเด็นสำคัญอย่างเป็นธรรมชาติด้วย Markdown bullet points หรือย่อหน้าที่ชัดเจน อธิบายให้เข้าใจลึกซึ้ง ครอบคลุม ไม่เพี้ยน และห้ามตัดจบอย่างห้วนๆ",
 
-  summarize: "หน้าที่ของคุณคือ: สรุปประเด็นสำคัญของข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> เป็น bullet points สั้นกระชับ ชัดเจนตามเนื้อหาต้นฉบับเท่านั้น ห้ามแต่งเติม ห้ามตอบคำถามหรือแก้โจทย์ เริ่มต้นสรุปทันที ไม่อารัมภบท ไม่ทักทาย",
+  summarize: "หน้าที่ของคุณคือ: สรุปประเด็นสำคัญของเนื้อหาจากข้อความเป้าหมาย (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือสิ่งที่ปรากฏในภาพที่ส่งมาเป็น Markdown bullet points อย่างครอบคลุม ชัดเจน และครบถ้วนทุกประเด็นสำคัญ แสดงเฉพาะหัวข้อสรุปโดยตรงทันที ไม่ต้องใส่คำว่า \"สรุป:\", \"สรุปได้ว่า:\", หรือ \"ผลการสรุป:\" นำหน้าเด็ดขาด เก็บใจความสำคัญ ข้อมูลสำคัญ และข้อค้นพบให้ครบถ้วน ห้ามตัดทอนประเด็นหลัก ห้ามแต่งเติม ห้ามตอบคำถามหรือแก้โจทย์ ไม่อารัมภบท ไม่ทักทาย ห้ามพิมพ์แท็ก <<<TARGET_TEXT_START>>>, <<<TARGET_TEXT_END>>>, เครื่องหมาย <<< หรือ >>> หรือ <<>> ในคำตอบเด็ดขาด",
 
-  translate_th: "หน้าที่ของคุณคือ: แปลข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> หรือข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพที่ส่งมาอย่างถูกต้อง สละสลวย เป็นธรรมชาติ Literal & Verbatim Translation แปลตรงตัวตามเนื้อหาต้นฉบับ 100% ประโยคต่อประโยค ครบถ้วนทุกประโยคและย่อหน้า (หากข้อความต้นฉบับเป็นภาษาต่างประเทศ เช่น ภาษาอังกฤษ ให้แปลเป็นภาษาไทย แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามมีข้อความภาษาอังกฤษก่อนหน้าคำแปลเด็ดขาด ห้ามแสดงข้อความภาษาต้นฉบับซ้ำ; หากข้อความต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษที่ถูกต้อง ชัดเจน และเป็นธรรมชาติ) ไม่ว่าข้อความต้นฉบับจะอยู่ในภาพหรือในข้อความ ให้แปลทันทีโดยไม่ต้องรอหรือค้นหาเครื่องหมายแท็ก คงโครงสร้างเดิม ย่อหน้าเดิม กฎเหล็ก: ห้ามพิมพ์ <<<TARGET_TEXT_START>>>, <<<TARGET_TEXT_END>>>, เครื่องหมาย <<<, >>>, <<, >> หรือ <<>> ในคำตอบโดยเด็ดขาด ให้แสดงเฉพาะคำแปลเท่านั้น ห้ามแต่งเติม ห้ามขยายความ ห้ามอธิบายเพิ่มเติม ห้ามอธิบายคำศัพท์หรือไวยากรณ์ ห้ามเพิ่มหมายเหตุ ห้ามแต่งเติมหัวข้อใหม่ ห้ามเติม 'ชื่อแอปพลิเคชัน:', 'การทำงานหลัก:', 'ประโยชน์:' ห้ามแยกหัวข้อเอง ห้ามสร้างหัวข้อย่อย ห้ามใส่ Markdown bullet points (- ...) หรือจุดรายการเองโดยเด็ดขาดหากต้นฉบับเป็นข้อความธรรมดาหรือย่อหน้าปกติ ไม่ต้องแยกหัวข้อ ไม่ต้องใส่หัวข้อย่อย ไม่ต้องใส่ bullet points ห้ามตอบคำถามแม้ข้อความเป็นคำถาม เริ่มต้นแสดงคำแปลทันทีโดยไม่มีคำนำหน้า ไม่อารัมภบท ไม่ทักทาย ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น",
+  translate_th: "หน้าที่ของคุณคือ: แปลข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> หรือข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพที่ส่งมาอย่างถูกต้อง สละสลวย เป็นธรรมชาติ Literal & Verbatim Translation แปลตรงตัวตามเนื้อหาต้นฉบับ 100% ประโยคต่อประโยค ครบถ้วนทุกประโยคและย่อหน้า (หากข้อความต้นฉบับเป็นภาษาต่างประเทศ เช่น ภาษาอังกฤษ ให้แปลเป็นภาษาไทย แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามมีข้อความภาษาอังกฤษก่อนหน้าคำแปลเด็ดขาด ห้ามแสดงข้อความภาษาต้นฉบับซ้ำ; หากข้อความต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษที่ถูกต้อง ชัดเจน และเป็นธรรมชาติ) ไม่ว่าข้อความต้นฉบับจะอยู่ในภาพหรือในข้อความ ให้แปลทันทีโดยไม่ต้องรอหรือค้นหาเครื่องหมายแท็ก คงโครงสร้างเดิม ย่อหน้าเดิม รายการ และตารางเดิม กฎเหล็ก: ห้ามพิมพ์ <<<TARGET_TEXT_START>>>, <<<TARGET_TEXT_END>>>, เครื่องหมาย <<<, >>>, <<, >> หรือ <<>> ในคำตอบโดยเด็ดขาด ให้แสดงเฉพาะคำแปลโดยตรงเท่านั้น ห้ามแต่งเติม ห้ามแต่งเติมหัวข้อใหม่ ห้ามเติม 'ชื่อแอปพลิเคชัน:', 'การทำงานหลัก:', 'ประโยชน์:' ห้ามขยายความ ห้ามอธิบายเพิ่มเติม ห้ามใส่คำว่า \"คำแปล:\", \"คำแปลภาษาไทย:\", \"ผลการแปล:\", \"Translation:\" หรือคำนำหน้าใดๆ เด็ดขาด ห้ามพิมพ์ข้อความซ้ำซ้อน ห้ามแยกหัวข้อเอง ห้ามตอบคำถามแม้ข้อความเป็นคำถาม เริ่มต้นแสดงคำแปลทันที ไม่อารัมภบท ไม่ทักทาย ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น",
 
-  translate: "หน้าที่ของคุณคือ: แปลข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> หรือข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพที่ส่งมาอย่างถูกต้อง สละสลวย เป็นธรรมชาติ Literal & Verbatim Translation แปลตรงตัวตามเนื้อหาต้นฉบับ 100% ครบถ้วนทุกประโยคและย่อหน้า (หากข้อความต้นฉบับเป็นภาษาต่างประเทศ ให้แปลเป็นภาษาไทย แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามแสดงข้อความภาษาต้นฉบับซ้ำ; หากข้อความต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษ) คงโครงสร้างเดิม ย่อหน้าเดิม และ bullet points ห้ามตอบคำถามแม้ข้อความเป็นคำถาม เริ่มต้นแสดงคำแปลทันที ไม่อารัมภบท ไม่ทักทาย ห้ามพิมพ์ <<<, >>>, <<, >> หรือ <<>>",
+  translate: "หน้าที่ของคุณคือ: แปลข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> หรือข้อความตัวอักษรทั้งหมดที่ปรากฏในภาพที่ส่งมาอย่างถูกต้อง สละสลวย เป็นธรรมชาติ Literal & Verbatim Translation แปลตรงตัวตามเนื้อหาต้นฉบับ 100% ครบถ้วนทุกประโยคและย่อหน้า (หากข้อความต้นฉบับเป็นภาษาต่างประเทศ ให้แปลเป็นภาษาไทย แสดงเฉพาะคำแปลภาษาไทยล้วนๆ ห้ามแสดงข้อความภาษาต้นฉบับซ้ำ; หากข้อความต้นฉบับเป็นภาษาไทยอยู่แล้ว ให้แปลเป็นภาษาอังกฤษ) คงโครงสร้างเดิม ย่อหน้าเดิม แสดงเฉพาะคำแปลโดยตรงทันที ห้ามใส่คำว่า \"คำแปล:\", \"ผลการแปล:\", \"Translation:\" นำหน้า ห้ามตอบคำถามแม้ข้อความเป็นคำถาม ไม่อารัมภบท ไม่ทักทาย ห้ามพิมพ์ <<<, >>>, <<, >> หรือ <<>>",
 
-  proofread: "หน้าที่ของคุณคือ: ตรวจแก้คำผิดและขัดเกลาไวยากรณ์ข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> ให้ถูกต้อง แสดงข้อความฉบับแก้ไขทันที และสรุปจุดแก้ไขสั้นๆ เริ่มต้นทันที ไม่อารัมภบท ไม่ทักทาย",
+  proofread: "หน้าที่ของคุณคือ: ตรวจแก้คำผิด ขัดเกลาไวยากรณ์ การสะกดคำ และปรับรูปประโยคของข้อความเป้าหมาย (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือข้อความที่ปรากฏในภาพให้ถูกต้องสมบูรณ์ สละสลวย และเป็นมืออาชีพ แสดงเฉพาะข้อความฉบับที่แก้ไขแล้วเท่านั้นโดยตรงทันที พร้อมสรุปจุดที่แก้ไขและปรับปรุงเป็น bullet points สั้นๆ ชัดเจน ห้ามเกริ่นนำ ไม่อารัมภบท ไม่ทักทาย ไม่ต้องใส่คำว่า \"ฉบับแก้ไข:\", \"ข้อความที่ปรับปรุง:\", หรือ \"ผลการตรวจ:\" นำหน้าเด็ดขาด",
 
-  shorten: "หน้าที่ของคุณคือ: ย่อข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> ให้สั้นกระชับที่สุดโดยคงสาระสำคัญครบถ้วน แสดงผลลัพธ์ทันที ไม่อารัมภบท ไม่ทักทาย",
+  shorten: "หน้าที่ของคุณคือ: ย่อข้อความเป้าหมายจากข้อความ (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือสิ่งที่ปรากฏในภาพให้สั้นกระชับ ชัดเจน ตรงประเด็น โดยยังคงข้อเท็จจริง สาระสำคัญ และความหมายครบถ้วน 100% ไม่เพี้ยน ไม่สูญเสียข้อมูลสำคัญ แสดงเฉพาะเนื้อหาที่ย่อแล้วโดยตรงทันที ห้ามมีคำนำหน้า เช่น \"ฉบับย่อ:\", \"ข้อความย่อ:\", \"ผลการย่อ:\" ไม่อารัมภบท ไม่ทักทาย ห้ามตอบคำถาม",
 
-  ocr: "หน้าที่ของคุณคือ: ถอดและคัดลอกข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> แบบ 100% ตัวต่อตัวอักษรตามต้นฉบับ ห้ามแปล ห้ามสรุป ห้ามแต่งเติม หากมีโค้ดให้ใส่ Code block ไม่อารัมภบท ไม่ทักทาย",
+  ocr: "หน้าที่ของคุณคือ: ถอดและคัดลอกข้อความตัวอักษรทุกคำ ทุกภาษา และตัวเลขทั้งหมดที่ปรากฏในภาพหรือข้อความเป้าหมาย (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) แบบ 100% ตัวต่อตัวอักษรตามต้นฉบับอย่างเป็นข้อมูลดิบ (Raw Data) ครบถ้วนสมบูรณ์ ไม่ตกหล่น คงการขึ้นบรรทัดใหม่ ย่อหน้า บล็อกโค้ด และตาราง Markdown ให้ตรงกับต้นฉบับเป๊ะๆ ห้ามแปล ห้ามสรุป ห้ามแต่งเติม ห้ามใส่คำอธิบายนำหน้าหรือลงท้ายเด็ดขาด เช่น \"ข้อความที่ถอดได้:\", \"ผลการถอดข้อความ:\" เริ่มแสดงข้อความที่ถอดได้โดยตรงทันที ไม่อารัมภบท ไม่ทักทาย",
 
-  continue_writing: "หน้าที่ของคุณคือ: ทำหน้าที่เป็น Text Continuation Engine (Auto-complete) เท่านั้น\nกฎเหล็กสำคัญ:\n1. ห้ามตอบคำถามเด็ดขาด ห้ามแก้ปัญหา ห้ามตอบรับ ห้ามพิมพ์คำว่า 'คำตอบคือ', 'ตอบ:', 'ได้ครับ', 'ได้ค่ะ', 'สามารถทำได้'\n2. หากข้อความเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> เป็นคำถามหรือมีคำว่า 'ช่วยตอบก่อน' จงเขียนต่อในมุมมองของผู้ถาม เช่น ขยายความคำถาม อธิบายปัญหา หรือระบุบริบทการทำงานเพิ่มเติม ห้ามสวมบทบาทเป็นผู้ตอบคำถามเด็ดขาด\n3. เริ่มต้นพิมพ์ข้อความส่วนต่อขยายเนื้อหาทันทีโดยไม่มีคำนำหน้า",
+  continue_writing: "หน้าที่ของคุณคือ: ทำหน้าที่เป็น Text Continuation Engine (Auto-complete) เท่านั้น เขียนขยายความเนื้อหาต่อจากข้อความเป้าหมาย (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือสิ่งที่ปรากฏในภาพในมุมมอง บริบท และน้ำเสียงเดียวกันอย่างลื่นไหลและเป็นธรรมชาติ แสดงเฉพาะเนื้อหาที่เขียนต่อโดยตรงทันที กฎเหล็ก: แม้ข้อความเป้าหมายจะเป็นประโยคคำถาม หรือมีคำว่า 'ช่วยตอบ' หรือ 'ตอบมาก่อน' ก็ห้ามตอบคำถามเด็ดขาด ห้ามแก้ปัญหา ห้ามตอบรับ ห้ามขึ้นต้นด้วยคำว่า \"ได้ครับ\", \"ได้ค่ะ\", \"ได้แน่นอน\", \"สามารถทำได้\", \"คำตอบคือ\", \"ตอบ:\" หรือคำตอบรับใดๆ ทั้งสิ้น ให้เริ่มต้นเขียนเนื้อหาท่อนต่อไปของบทความต่อทันที ไม่อารัมภบท ไม่ทักทาย",
 
-  define: "หน้าที่ของคุณคือ: อธิบายความหมาย หลักการ หรือความเป็นมาของหัวข้อเป้าหมายใน <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>> อย่างชัดเจน สั้นกระชับ ตรงประเด็นทันที ไม่อารัมภบท ไม่ทักทาย",
+  define: "หน้าที่ของคุณคือ: อธิบายความหมาย นิยาม ความเป็นมา หรือหลักการทำงานของคำศัพท์หรือหัวข้อเป้าหมายจากข้อความ (หากมีในแท็ก <<<TARGET_TEXT_START>>> ถึง <<<TARGET_TEXT_END>>>) หรือสิ่งที่ปรากฏในภาพอย่างละเอียด ถูกต้อง ชัดเจน และตรงประเด็น แสดงเฉพาะคำนิยามหรือความหมายโดยตรงทันที ไม่ต้องใส่คำว่า \"คำนิยามคือ\", \"ความหมายคือ\", หรือ \"คือ:\" นำหน้าเด็ดขาด ไม่อารัมภบท ไม่ทักทาย ครอบคลุมหลักการสำคัญอย่างครบถ้วน",
 
-  custom_ask: "หน้าที่ของคุณคือ: ตอบคำถามหรือปฏิบัติตามคำสั่งอย่างถูกต้อง ตรงประเด็น สั้นกระชับ ชัดเจนทันที ไม่อารัมภบท ไม่ทักทาย หากมีสูตรคณิตศาสตร์ใช้ LaTeX $...$ หากมีโค้ดใช้ Code block"
+  custom_ask: "หน้าที่ของคุณคือ: ตอบคำถาม วิเคราะห์ข้อมูล หรือปฏิบัติตามคำสั่งจากข้อความและภาพเป้าหมายอย่างถูกต้อง แม่นยำ ชัดเจน ตรงประเด็น และครบถ้วนทุกประเด็น ให้แสดงเฉพาะเนื้อหาคำตอบโดยตรงทันที ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ ไม่ต้องใส่คำว่า \"คำตอบ:\", \"คำตอบคือ\", หรือ \"**คำตอบ:**\" นำหน้าเด็ดขาด หากมีสูตรคณิตศาสตร์หรือวิทยาศาสตร์ให้ใช้ LaTeX $...$ หรือ $$...$$ พร้อมขั้นตอนคิดที่ถูกต้อง หากมีโค้ดโปรแกรมให้ใช้ Code block ที่สมบูรณ์และถูกต้อง"
 };
 
 // Auxiliary capability definition: id: 'ocr'
 
 const CATEGORY_MAX_OUTPUT_TOKENS = {
-  shorten: 512, // shorten: 1024
-  define: 512,
-  translate_th: 4096, // translate_th: 768 / 2048
+  shorten: 4096,
+  define: 4096,
+  translate_th: 4096,
   translate: 4096,
-  summarize: 2048,
+  summarize: 4096,
   answer: 4096,
   ocr: 4096,
-  proofread: 2048,
+  proofread: 4096,
   explain: 4096,
   continue_writing: 4096,
   custom_ask: 4096
@@ -3908,7 +3837,17 @@ ipcMain.handle('save-text-prompts', (event, prompts) => {
 });
 
 ipcMain.on('close-quick-text', () => {
-  closeQuickTextMode();
+  closeQuickTextMode(true);
+});
+
+ipcMain.on('dismiss-toolbar-window', () => {
+  isQuickTextActive = false;
+  if (toolbarWindow && !toolbarWindow.isDestroyed()) {
+    try {
+      toolbarWindow.setFocusable(false);
+    } catch (e) {}
+    toolbarWindow.hide();
+  }
 });
 
 ipcMain.on('set-toolbar-focusable', (event, flag) => {
@@ -3918,8 +3857,24 @@ ipcMain.on('set-toolbar-focusable', (event, flag) => {
       toolbarWindow.setFocusable(focusable);
       if (focusable) {
         toolbarWindow.focus();
+        unregisterDigitShortcuts();
+      } else {
+        if (!isAnswerCardActive && !isCustomAskOpen) {
+          registerDigitShortcuts();
+        }
       }
     } catch (e) {}
+  }
+});
+
+ipcMain.on('set-toolbar-custom-ask-open', (event, flag) => {
+  isCustomAskOpen = Boolean(flag);
+  if (isCustomAskOpen) {
+    unregisterDigitShortcuts();
+  } else {
+    if (!isAnswerCardActive) {
+      registerDigitShortcuts();
+    }
   }
 });
 
@@ -3932,9 +3887,7 @@ ipcMain.on('resize-toolbar-window', (event, bounds) => {
       if (newHeight === 46 || newHeight === 52) {
         newHeight = 58; // Signature compat: newHeight = 52;
       }
-      if (newWidth === 920 || newWidth === 940) {
-        newWidth = 1060; // Signature compat: newWidth = 940;
-      }
+      // Signature compat: if (newWidth === 920 || newWidth === 940 || newWidth === 1060) { newWidth = 1180; } // Signature compat: newWidth = 1060; // Signature compat: newWidth = 940;
       const activeDisplay = screen.getDisplayNearestPoint({ x: cur.x, y: cur.y });
       const wa = activeDisplay.workArea;
 
@@ -3953,12 +3906,21 @@ ipcMain.on('resize-toolbar-window', (event, bounds) => {
 
       if (newHeight >= 100) {
         isAnswerCardActive = true;
-      } else if (newHeight <= 60) {
+        stopOutsideClickMonitor();
+        if (nativeBridge && nativeBridge.isDllAvailable()) {
+          nativeBridge.setToolbarActiveState(0, 0, 0, 0, 0);
+        }
+        startTopmostKeeper();
+      } else if (newHeight <= 60 && !activeAiAbortController) {
         isAnswerCardActive = false;
       }
 
       if (nativeBridge && nativeBridge.isDllAvailable()) {
-        nativeBridge.setToolbarActiveState(1, cur.x, newY, newWidth, newHeight);
+        if (!isAnswerCardActive) {
+          nativeBridge.setToolbarActiveState(1, cur.x, newY, newWidth, newHeight);
+        } else {
+          nativeBridge.setToolbarActiveState(0, 0, 0, 0, 0);
+        }
       }
 
       enforceTopmostWin32(toolbarWindow);
@@ -3968,6 +3930,25 @@ ipcMain.on('resize-toolbar-window', (event, bounds) => {
 
 ipcMain.on('set-toolbar-answer-active', (event, active) => {
   isAnswerCardActive = Boolean(active);
+  if (isAnswerCardActive) {
+    stopOutsideClickMonitor();
+    if (nativeBridge && nativeBridge.isDllAvailable()) {
+      nativeBridge.setToolbarActiveState(0, 0, 0, 0, 0);
+    }
+    startTopmostKeeper();
+    // Mutual exclusion: ensure only ONE window presents toolbar/answer
+    if (mainWindow && event.sender === mainWindow.webContents) {
+      isQuickTextActive = false;
+      if (toolbarWindow && !toolbarWindow.isDestroyed()) {
+        try { toolbarWindow.setFocusable(false); } catch (e) {}
+        toolbarWindow.hide();
+      }
+    } else if (toolbarWindow && event.sender === toolbarWindow.webContents) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('close-quick-text-ui');
+      }
+    }
+  }
 });
 
 ipcMain.on('set-quick-answer-pinned', (event, flag) => {
@@ -3993,14 +3974,27 @@ ipcMain.on('set-quick-answer-pinned', (event, flag) => {
   }
 });
 
-ipcMain.on('move-toolbar-by', (event, { deltaX, deltaY }) => {
+ipcMain.on('set-toolbar-dragging', (event, dragging) => {
+  isToolbarDragging = Boolean(dragging);
+  if (!isToolbarDragging) {
+    lastToolbarDragEndTime = Date.now();
+    if (toolbarWindow && !toolbarWindow.isDestroyed()) {
+      enforceTopmostWin32(toolbarWindow);
+    }
+  }
+});
+
+ipcMain.on('move-toolbar-by', (event, delta) => {
+  const deltaX = (delta && (delta.deltaX ?? delta.dx)) || 0;
+  const deltaY = (delta && (delta.deltaY ?? delta.dy)) || 0;
   if (toolbarWindow && !toolbarWindow.isDestroyed() && (deltaX || deltaY)) {
     try {
+      isToolbarDragging = true;
+      lastToolbarDragEndTime = Date.now();
       const cur = toolbarWindow.getBounds();
-      const nextX = Math.round(cur.x + (deltaX || 0));
-      const nextY = Math.round(cur.y + (deltaY || 0));
+      const nextX = Math.round(cur.x + deltaX);
+      const nextY = Math.round(cur.y + deltaY);
       toolbarWindow.setPosition(nextX, nextY);
-      enforceTopmostWin32(toolbarWindow);
       if (nativeBridge && nativeBridge.isDllAvailable()) {
         nativeBridge.setToolbarActiveState(1, nextX, nextY, cur.width, cur.height);
       }
@@ -4036,12 +4030,30 @@ function sanitizeAndOptimizeInputText(rawText) {
 
 ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, promptId, categoryName, imageBase64, sourceType }) => {
   isSnippingActive = false;
+  isAnswerCardActive = true;
+  // Mutual exclusion: ensure only ONE window presents toolbar/answer card
+  if (mainWindow && event.sender === mainWindow.webContents) {
+    isQuickTextActive = false;
+    if (toolbarWindow && !toolbarWindow.isDestroyed()) {
+      try { toolbarWindow.setFocusable(false); } catch (e) {}
+      toolbarWindow.hide();
+    }
+  } else if (toolbarWindow && event.sender === toolbarWindow.webContents) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('close-quick-text-ui');
+    }
+  }
+  try {
+    globalShortcut.unregister('Escape');
+  } catch (e) {}
   // Restore original clipboard when user starts sending prompt to AI
   try {
     restoreActiveClipboard();
   } catch (e) {}
 
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3-flash-preview';
+  const isMath = isMathProblem(promptText);
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -4051,97 +4063,12 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
   const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
-  const systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  let systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  if (isMath) {
+    systemInstructionText += MATH_CODE_EXECUTION_SYSTEM_INSTRUCTION;
+  }
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 4096;
   const imageToUse = imageBase64 || lastCapturedScreenImage;
-
-  if (isDeepSeekModel(selectedModel)) {
-    const targetModel = (imageToUse && selectedModel === 'deepseek-v4-pro') ? 'deepseek-flash' : selectedModel;
-    const isThinking = Boolean(currentConfig?.modelThinking && currentConfig.modelThinking[selectedModel]);
-    const messages = [
-      { role: 'system', content: systemInstructionText }
-    ];
-
-    if (imageToUse) {
-      messages.push({
-        role: 'user',
-        content: optimizedPrompt || 'วิเคราะห์และให้คำตอบจากภาพนี้'
-      });
-    } else {
-      messages.push({
-        role: 'user',
-        content: optimizedPrompt || 'วิเคราะห์ข้อมูล'
-      });
-    }
-
-    const deepseekPayload = {
-      model: targetModel,
-      messages,
-      temperature: 0.0,
-      max_tokens: maxTokens,
-      thinking: { type: isThinking ? 'enabled' : 'disabled' }
-    };
-
-    let usedEndpoint = targetModel;
-    try {
-      const streamRes = await executeDeepSeekStream(apiKey, [targetModel, 'deepseek-flash', 'deepseek-chat'], deepseekPayload, (chunk, ep) => {
-        usedEndpoint = ep;
-        if (event.sender && !event.sender.isDestroyed()) {
-          event.sender.send('quick-answer-chunk', {
-            chunk,
-            endpointUsed: ep
-          });
-        }
-      });
-
-      const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
-      const fullText = streamRes.fullText || '';
-      const cleanedFullText = fullText
-        .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
-        .replace(/<<<|>>>/g, '')
-        .replace(/<<>>/g, '')
-        .replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '')
-        .replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '')
-        .trim();
-
-      quickResponseCache.set(selectedModel, resolvedCategory, optimizedPrompt, cleanedFullText, usedEndpoint);
-
-      const catDisplayName = categoryName || resolvedCategory || 'คำตอบ';
-      saveHistoryItem({
-        category: catDisplayName,
-        promptId: resolvedCategory,
-        model: usedEndpoint,
-        modelId: usedEndpoint,
-        question: optimizedPrompt,
-        sourceSnippet: optimizedPrompt.slice(0, 85),
-        fullText: cleanedFullText,
-        durationSec: durationSec,
-        thumbnail: imageToUse || null
-      }).catch(e => console.warn('[History Auto Save Warning]', e.message));
-
-      if (event.sender && !event.sender.isDestroyed()) {
-        event.sender.send('quick-answer-finish', {
-          fullText,
-          durationSec,
-          endpointUsed: usedEndpoint
-        });
-      }
-
-      return {
-        success: true,
-        fullText,
-        durationSec,
-        endpointUsed: usedEndpoint
-      };
-    } catch (err) {
-      if (event.sender && !event.sender.isDestroyed()) {
-        event.sender.send('quick-answer-error', {
-          error: err.message || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'
-        });
-      }
-      throw err;
-    }
-  }
 
   // Always perform fresh AI dispatch (no cached stale bypass)
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
@@ -4187,6 +4114,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
         parts: userParts
       }
     ],
+    tools: (!['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory) && (isMath || (currentConfig?.tools?.enableCodeExecution !== false && ['answer', 'custom_ask', 'explain'].includes(resolvedCategory)))) ? [{ codeExecution: {} }] : undefined,
     generationConfig: {
       temperature: 0.0,
       maxOutputTokens: maxTokens,
@@ -4209,13 +4137,19 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
     const durationSec = ((Date.now() - startTime) / 1000).toFixed(2);
     const fullText = streamRes.fullText || '';
-    const cleanedFullText = fullText
-      .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
-      .replace(/<<<|>>>/g, '')
-      .replace(/<<>>/g, '')
-      .replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '')
-      .replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '')
-      .trim();
+    const isTranslation = resolvedCategory === 'translate' || resolvedCategory === 'translate_th';
+    const textToClean = (!isTranslation && typeof stripCodeExecutionAndExtractAnswer === 'function')
+      ? stripCodeExecutionAndExtractAnswer(fullText)
+      : fullText;
+    const cleanedFullText = stripLeadingAnswerPrefix(
+      textToClean
+        .replace(/<<<TARGET_TEXT_(?:START|END)>>>/gi, '')
+        .replace(/<<<|>>>/g, '')
+        .replace(/<<>>/g, '')
+        .replace(/^\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*\n?/gm, '')
+        .replace(/\n?\s*(?:<{2,}[^>\n]*>{2,}|<{2,}|>{2,}|<<\s*>>)\s*$/gm, '')
+        .trim()
+    );
 
     // Cache successful response in memory
     quickResponseCache.set(selectedModel, resolvedCategory, optimizedPrompt, cleanedFullText, usedEndpoint);
@@ -4236,7 +4170,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('quick-answer-finish', {
-        fullText,
+        fullText: cleanedFullText,
         durationSec,
         endpointUsed: usedEndpoint
       });
@@ -4244,11 +4178,24 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
     return {
       success: true,
-      fullText,
+      fullText: cleanedFullText,
       durationSec,
       endpointUsed: usedEndpoint
     };
   } catch (err) {
+    const isCancelled = err?.name === 'AbortError' ||
+      err?.message?.includes('การสตรีมถูกยกเลิก') ||
+      err?.message?.includes('aborted') ||
+      err?.message?.includes('cancelled');
+    if (isCancelled) {
+      console.log('[Gemini Stream] Stream gracefully cancelled on demand');
+      return {
+        success: false,
+        cancelled: true,
+        fullText: '',
+        durationSec: '0'
+      };
+    }
     if (event.sender && !event.sender.isDestroyed()) {
       event.sender.send('quick-answer-error', {
         error: err.message || 'เกิดข้อผิดพลาดในการประมวลผลคำตอบ'
@@ -4260,11 +4207,18 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
 // IPC Handler: Prepare parameters for Direct Renderer Streaming and check LRU Cache
 ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, categoryName, modelId, imageBase64 }) => {
+  isSnippingActive = false;
+  isAnswerCardActive = true;
+  try {
+    globalShortcut.unregister('Escape');
+  } catch (e) {}
   try {
     restoreActiveClipboard();
   } catch (e) {}
 
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3-flash-preview';
+  const isMath = isMathProblem(promptText);
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -4273,48 +4227,12 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
   const optimizedPrompt = sanitizeAndOptimizeInputText(promptText);
   const resolvedCategory = resolveQuickTextCategory(promptId, promptText);
 
-  const systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  let systemInstructionText = CATEGORY_SYSTEM_INSTRUCTIONS[resolvedCategory] || CATEGORY_SYSTEM_INSTRUCTIONS.custom_ask;
+  if (isMath) {
+    systemInstructionText += MATH_CODE_EXECUTION_SYSTEM_INSTRUCTION;
+  }
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 4096;
   const imageToUse = imageBase64 || lastCapturedScreenImage;
-
-  if (isDeepSeekModel(selectedModel)) {
-    const targetModel = (imageToUse && selectedModel === 'deepseek-v4-pro') ? 'deepseek-flash' : selectedModel;
-    const isThinking = Boolean(currentConfig?.modelThinking && currentConfig.modelThinking[selectedModel]);
-    const messages = [
-      { role: 'system', content: systemInstructionText }
-    ];
-
-    if (imageToUse) {
-      messages.push({
-        role: 'user',
-        content: optimizedPrompt || 'วิเคราะห์และให้คำตอบจากภาพนี้'
-      });
-    } else {
-      messages.push({
-        role: 'user',
-        content: optimizedPrompt || 'วิเคราะห์ข้อมูล'
-      });
-    }
-
-    const deepseekPayload = {
-      model: targetModel,
-      messages,
-      temperature: 0.0,
-      max_tokens: maxTokens,
-      thinking: { type: isThinking ? 'enabled' : 'disabled' }
-    };
-
-    return {
-      cached: false,
-      provider: 'deepseek',
-      apiKey,
-      endpointsToTry: [targetModel, 'deepseek-flash'],
-      selectedModel,
-      resolvedCategory,
-      optimizedPrompt,
-      requestPayload: deepseekPayload
-    };
-  }
 
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
   const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
@@ -4353,6 +4271,7 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
         parts: userParts
       }
     ],
+    tools: (!['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory) && (isMath || (currentConfig?.tools?.enableCodeExecution !== false && ['answer', 'custom_ask', 'explain'].includes(resolvedCategory)))) ? [{ codeExecution: {} }] : undefined,
     generationConfig: {
       temperature: 0.0,
       maxOutputTokens: maxTokens,
@@ -4367,6 +4286,8 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
     selectedModel,
     resolvedCategory,
     optimizedPrompt,
+    isMath,
+    codeExecutionEnabled: Boolean(requestPayload.tools?.some(t => t.codeExecution)),
     requestPayload
   };
 });
@@ -4393,10 +4314,13 @@ module.exports = {
   executeSingleGeminiStream,
   isDeepSeekModel,
   getEffectiveApiKey,
-  executeDeepSeekStream,
-  callDeepSeekApi,
   validateApiKeyFormat,
-  getThinkingConfigForModel
+  getThinkingConfigForModel,
+  isMathProblem,
+  fastExtractSsePartText,
+  stripLeadingAnswerPrefix,
+  extractDirectAnswerFromOutput,
+  stripCodeExecutionAndExtractAnswer
 };
 
 

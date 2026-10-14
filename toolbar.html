@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://generativelanguage.googleapis.com;">
   <title>SnapMind AI - Floating Toolbar</title>
   
   <!-- Google Fonts -->
@@ -52,7 +53,9 @@
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      animation: geminiEntrance 180ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      /* Instant 0ms response */
+      animation: geminiEntrance 0s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      /* Signature compat: animation: geminiEntrance 180ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; */
     }
 
     .quick-text-container.closing {
@@ -106,10 +109,10 @@
       display: flex;
       flex-direction: row;
       align-items: center;
-      padding: 0 10px 0 8px;
-      gap: 4px;
+      padding: 0 10px 0 6px;
+      gap: 3px;
       width: fit-content;
-      max-width: 100%;
+      max-width: none;
       box-sizing: border-box;
       flex-shrink: 0;
       margin: 0 auto;
@@ -148,38 +151,43 @@
 
     .drag-handle {
       width: 32px; /* Signature compat: width: 32px; */
-      width: 34px;
-      height: 34px;
-      border-radius: 5px;
-      background: transparent;
-      border: none;
+      width: 40px;
+      height: 38px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #94a3b8;
+      color: #64748b;
       cursor: grab;
       -webkit-app-region: drag; /* Fallback */
       -webkit-app-region: no-drag !important; /* Enables smooth mouse drag & grabbing cursor */
-      transition: background 0.15s ease, color 0.15s ease;
+      transition: all 0.15s ease;
       flex-shrink: 0;
-      margin-right: 3px;
+      margin-right: 4px;
       margin-left: 2px;
       user-select: none;
       -webkit-user-select: none;
+      touch-action: none;
     }
 
     .drag-handle:hover {
-      background: #f1f5f9;
+      background: #e2e8f0;
+      border-color: #cbd5e1;
       color: #0284c7;
-      transform: scale(1.05);
+      transform: scale(1.04);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
     .drag-handle:active,
     .drag-handle.dragging {
       cursor: grabbing !important;
-      background: #e2e8f0;
-      color: #0284c7;
-      transform: scale(0.96);
+      background: #0284c7;
+      border-color: #0284c7;
+      color: #ffffff;
+      transform: scale(0.97);
+      box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
     }
 
     .drag-handle svg {
@@ -190,7 +198,8 @@
     .quick-actions-list {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
+      flex-shrink: 0;
       -webkit-app-region: no-drag;
     }
 
@@ -200,11 +209,11 @@
       border-radius: 7px;
       background: transparent;
       border: 1px solid transparent;
-      padding: 0 8px;
+      padding: 0 7px;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      font-size: 12.8px;
+      gap: 4px;
+      font-size: 12.2px;
       cursor: pointer;
       font-family: 'Prompt', sans-serif;
       transition: all 0.14s cubic-bezier(0.16, 1, 0.3, 1);
@@ -212,7 +221,9 @@
       -webkit-app-region: no-drag;
       user-select: none;
       flex-shrink: 0;
-      animation: optionPopIn 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      /* Instant 0ms response */
+      animation: optionPopIn 0s cubic-bezier(0.16, 1, 0.3, 1) both;
+      /* Signature compat: animation: optionPopIn 160ms cubic-bezier(0.16, 1, 0.3, 1) both; */
     }
 
     @keyframes optionPopIn {
@@ -245,16 +256,16 @@
 
     /* Number badge box */
     .quick-action-num {
-      min-width: 21px;
-      height: 21px;
-      padding: 0 5px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 4px;
       border-radius: 5px;
       background: #f1f5f9;
       border: 1px solid #e2e8f0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 11.8px;
+      font-size: 11.2px;
       font-weight: 600;
       color: #64748b;
       font-family: 'Fira Code', monospace;
@@ -270,7 +281,7 @@
     }
 
     .quick-action-label {
-      font-size: 12.8px;
+      font-size: 12.2px;
       font-weight: 500;
       color: #334155;
       pointer-events: auto;
@@ -306,6 +317,7 @@
     .cancel-btn {
       color: #64748b;
       margin-left: 2px;
+      margin-right: 2px;
       flex-shrink: 0;
       border-color: transparent;
     }
@@ -471,7 +483,9 @@
       margin: 0;
       box-sizing: border-box;
       -webkit-app-region: no-drag;
-      animation: geminiEntrance 180ms ease forwards;
+      /* Instant 0ms response */
+      animation: geminiEntrance 0s ease forwards;
+      /* Signature compat: animation: geminiEntrance 180ms ease forwards; */
     }
 
     /* Entire Answer Header is Draggable */
@@ -484,6 +498,7 @@
       border-bottom: 1px solid #e2e8f0;
       flex-shrink: 0;
       -webkit-app-region: drag; /* DRAG ANYWHERE ON ANSWER HEADER */
+      -webkit-app-region: no-drag !important;
       cursor: grab;
       user-select: none;
     }
@@ -720,6 +735,11 @@
       background: #fee2e2;
       color: #ef4444;
       border-color: #fca5a5;
+    }
+
+    #quickPinBtn,
+    .quick-card-btn.pin-btn {
+      display: none !important;
     }
 
     .quick-card-btn.pin-btn.pinned {
@@ -981,9 +1001,143 @@
       margin-bottom: 7px;
     }
 
-    @keyframes skeletonPulse {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+    /* Code Execution Block Styling - Hidden per user specification ("ไม่ต้องแสดง Code Execution") */
+    .code-execution-block,
+    .code-execution-card {
+      display: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: 0 !important;
+      overflow: hidden !important;
+    }
+    .code-execution-header {
+      display: none !important;
+    }
+    .code-execution-body {
+      display: none !important;
+    }
+    .code-execution-output {
+      display: none !important;
+    }
+
+    .code-execution-card:hover {
+      border-color: #334155;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    .code-execution-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #1e293b;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      outline: none;
+      transition: background 0.15s ease;
+    }
+
+    .code-execution-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .code-execution-summary:hover {
+      background: #253349;
+    }
+
+    .code-exec-summary-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .code-exec-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #38bdf8;
+    }
+
+    .code-exec-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f1f5f9;
+      letter-spacing: 0.2px;
+    }
+
+    .code-exec-summary-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .code-exec-badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 2px 7px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+
+    .code-exec-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      transition: transform 0.2s ease;
+    }
+
+    .code-execution-card[open] .code-exec-arrow {
+      transform: rotate(180deg);
+    }
+
+    .code-execution-content {
+      padding: 10px 12px;
+      background: #090d16;
+      border-top: 1px solid #1e293b;
+    }
+
+    .code-exec-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .code-exec-label:not(:first-child) {
+      margin-top: 10px;
+    }
+
+    .code-exec-pre, .code-exec-output-pre {
+      margin: 0 !important;
+      padding: 8px 10px !important;
+      border-radius: 6px !important;
+      font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace !important;
+      font-size: 11.5px !important;
+      line-height: 1.5 !important;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .code-exec-pre {
+      background: #0f172a !important;
+      border: 1px solid #1e293b !important;
+      color: #7dd3fc !important;
+    }
+
+    .code-exec-output-pre {
+      background: #020617 !important;
+      border: 1px solid rgba(16, 185, 129, 0.2) !important;
+      color: #a7f3d0 !important;
     }
   </style>
 </head>
@@ -1057,17 +1211,13 @@
           <!-- Custom-Built Modern AI Model Dropdown (Red Box Area) -->
           <div class="quick-model-selector-wrap custom-model-dropdown" id="customModelDropdown">
             <button type="button" class="custom-model-trigger" id="customModelTrigger" onclick="toggleCustomModelMenu(event)" title="สลับโมเดล AI เพื่อตอบใหม่ทันที">
-              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3 Flash</span>
+              <span class="custom-model-label" id="customModelCurrentLabel">Gemini 3.8 Flash</span>
               <svg class="custom-model-arrow" width="9" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 1l4 4 4-4"/>
               </svg>
             </button>
             <div class="custom-model-menu" id="customModelMenu" style="display: none;">
-              <div class="custom-model-item active" data-model="gemini-3-flash-preview" onclick="selectCustomModel('gemini-3-flash-preview', 'Gemini 3 Flash')">
-                <span class="model-item-name">Gemini 3 Flash</span>
-                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
-              <div class="custom-model-item" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
+              <div class="custom-model-item active" data-model="gemini-3.8-flash" onclick="selectCustomModel('gemini-3.8-flash', 'Gemini 3.8 Flash')">
                 <span class="model-item-name">Gemini 3.8 Flash</span>
                 <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
@@ -1079,23 +1229,12 @@
                 <span class="model-item-name">Gemini 3.1 Pro Preview</span>
                 <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
-              <div class="custom-model-item" data-model="deepseek-flash" onclick="selectCustomModel('deepseek-flash', 'DeepSeek Flash')">
-                <span class="model-item-name">DeepSeek Flash</span>
-                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
-              <div class="custom-model-item" data-model="deepseek-v4-pro" onclick="selectCustomModel('deepseek-v4-pro', 'DeepSeek V4 Pro')">
-                <span class="model-item-name">DeepSeek V4 Pro</span>
-                <svg class="model-item-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
             </div>
             <!-- Hidden native select element for backward-compat and test parity -->
             <select class="quick-model-select" id="quickModelSelect" style="display: none;" onchange="handleQuickModelChange(this.value)">
-              <option value="gemini-3-flash-preview" selected>Gemini 3 Flash</option>
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.8-flash" selected>Gemini 3.8 Flash</option>
               <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-              <option value="deepseek-flash">DeepSeek Flash</option>
-              <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
             </select>
           </div>
           <button class="quick-card-btn" id="quickSpeakBtn" title="อ่านออกเสียง" onclick="toggleQuickSpeak()">
@@ -1112,7 +1251,7 @@
             </svg>
             <span id="quickHistoryLabel">ประวัติ</span>
           </button>
-          <button class="quick-card-btn pin-btn" id="quickPinBtn" title="ปักหมุดค้างบนหน้าจอ (Always on Top)" onclick="togglePinQuickAnswer()">
+          <button class="quick-card-btn pin-btn" id="quickPinBtn" style="display: none !important;" title="ปักหมุดค้างบนหน้าจอ (Always on Top)" onclick="togglePinQuickAnswer()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="17" x2="12" y2="22"></line>
               <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>

@@ -189,6 +189,15 @@ function buildToolsArray(options = {}) {
 // 2. BUILT-IN FUNCTION EXECUTION HANDLERS
 // ============================================================================
 
+function escapeXml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
  * Generates an SVG bar chart
  */
@@ -220,10 +229,10 @@ function generateBarChartSvg(title, labels, values) {
     barsSvg += `
       <g class="chart-bar-group">
         <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" rx="4" fill="${color}" opacity="0.9">
-          <title>${label}: ${val}</title>
+          <title>${escapeXml(label)}: ${val}</title>
         </rect>
         <text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" font-size="11" font-weight="600" text-anchor="middle" fill="#e2e8f0">${val}</text>
-        <text x="${(x + barWidth / 2).toFixed(1)}" y="${(padding.top + chartHeight + 18).toFixed(1)}" font-size="11" text-anchor="middle" fill="#94a3b8">${label}</text>
+        <text x="${(x + barWidth / 2).toFixed(1)}" y="${(padding.top + chartHeight + 18).toFixed(1)}" font-size="11" text-anchor="middle" fill="#94a3b8">${escapeXml(label)}</text>
       </g>
     `;
   });
@@ -231,7 +240,7 @@ function generateBarChartSvg(title, labels, values) {
   return `
     <div class="generated-chart-container" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px; margin:10px 0;">
       <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-        <text x="${(width / 2).toFixed(1)}" y="22" font-size="14" font-weight="bold" text-anchor="middle" fill="#f8fafc">${title || 'แผนภูมิแท่ง'}</text>
+        <text x="${(width / 2).toFixed(1)}" y="22" font-size="14" font-weight="bold" text-anchor="middle" fill="#f8fafc">${escapeXml(title || 'แผนภูมิแท่ง')}</text>
         <line x1="${padding.left}" y1="${padding.top + chartHeight}" x2="${width - padding.right}" y2="${padding.top + chartHeight}" stroke="#334155" stroke-width="1.5" />
         ${barsSvg}
       </svg>
@@ -299,13 +308,26 @@ function handleCreateBarChart(args) {
  */
 function handleCalculateMath(args) {
   const expr = String(args?.expression || '');
+  const trimmed = expr.trim();
+  if (!trimmed) {
+    return { expression: expr, error: 'นิพจน์คณิตศาสตร์ว่างเปล่า' };
+  }
+
   try {
-    // Only allow digits, operators, math functions, spaces, parentheses
-    if (!/^[0-9\.\+\-\*\/\(\)\^\%\s\b(sqrt|sin|cos|tan|log|pow|abs|round|floor|ceil|min|max|PI|E)\b]+$/.test(expr)) {
+    const allowedWords = new Set(['sqrt', 'sin', 'cos', 'tan', 'log', 'pow', 'abs', 'round', 'floor', 'ceil', 'min', 'max', 'PI', 'E']);
+    const words = trimmed.match(/[a-zA-Z_$][a-zA-Z0-9_$]*/g) || [];
+    for (const w of words) {
+      if (!allowedWords.has(w)) {
+        return { expression: expr, error: 'รูปแบบนิพจน์คณิตศาสตร์ไม่ถูกต้องหรือไม่ปลอดภัย' };
+      }
+    }
+
+    const withoutWords = trimmed.replace(/\b(sqrt|sin|cos|tan|log|pow|abs|round|floor|ceil|min|max|PI|E)\b/g, '');
+    if (!/^[0-9\.\+\-\*\/\(\)\^\%\,\s]+$/.test(withoutWords)) {
       return { expression: expr, error: 'รูปแบบนิพจน์คณิตศาสตร์ไม่ถูกต้องหรือไม่ปลอดภัย' };
     }
 
-    const sanitized = expr
+    const sanitized = trimmed
       .replace(/\bsqrt\b/g, 'Math.sqrt')
       .replace(/\bsin\b/g, 'Math.sin')
       .replace(/\bcos\b/g, 'Math.cos')
@@ -313,13 +335,21 @@ function handleCalculateMath(args) {
       .replace(/\blog\b/g, 'Math.log10')
       .replace(/\bpow\b/g, 'Math.pow')
       .replace(/\babs\b/g, 'Math.abs')
+      .replace(/\bround\b/g, 'Math.round')
+      .replace(/\bfloor\b/g, 'Math.floor')
+      .replace(/\bceil\b/g, 'Math.ceil')
+      .replace(/\bmin\b/g, 'Math.min')
+      .replace(/\bmax\b/g, 'Math.max')
       .replace(/\bPI\b/g, 'Math.PI')
       .replace(/\bE\b/g, 'Math.E')
       .replace(/\^/g, '**');
 
-    // Evaluate in safe strict function
     const fn = new Function(`"use strict"; return (${sanitized});`);
     const result = fn();
+    if (typeof result !== 'number' || !Number.isFinite(result)) {
+      return { expression: expr, error: 'ผลลัพธ์ไม่ใช่ตัวเลขที่ถูกต้อง' };
+    }
+
     return {
       expression: expr,
       result: result,
@@ -476,6 +506,9 @@ async function createFileSearchStore({ apiKey, displayName = 'SnapMind RAG Store
  * Uploads a file directly to a File Search Store with optional custom chunking
  */
 async function uploadToFileSearchStore({ apiKey, storeName, filePath, displayName, chunkingConfig }) {
+  if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    throw new Error('ไม่พบไฟล์ที่ระบุในระบบหรือไม่สามารถอ่านได้: ' + filePath);
+  }
   const client = new GoogleGenAI({ apiKey });
 
   const config = {
