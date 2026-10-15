@@ -99,11 +99,13 @@ async function optimizeImageForAiVision(imageInput, options = {}) {
 
   // Fallback for standalone Node CLI / test environment
   const parsedDims = parseJpegDimensions(inputBuffer);
+  let origW = (parsedDims.width > 1) ? parsedDims.width : (rect && rect.w ? rect.w : parsedDims.width);
+  let origH = (parsedDims.height > 1) ? parsedDims.height : (rect && rect.h ? rect.h : parsedDims.height);
   const isSmallDenseText = (rect && rect.w <= denseTextThreshold.w && rect.h <= denseTextThreshold.h) ||
-                          (!rect && parsedDims.width <= denseTextThreshold.w && parsedDims.height <= denseTextThreshold.h);
+                          (!rect && origW <= denseTextThreshold.w && origH <= denseTextThreshold.h);
 
-  let targetWidth = parsedDims.width;
-  let targetHeight = parsedDims.height;
+  let targetWidth = origW;
+  let targetHeight = origH;
   if (!isSmallDenseText && (targetWidth > maxDimension || targetHeight > maxDimension)) {
     if (targetWidth >= targetHeight) {
       targetHeight = Math.max(1, Math.round((targetHeight / targetWidth) * maxDimension));

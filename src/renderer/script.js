@@ -19,6 +19,14 @@ const AI_MODELS = [
     desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที (แนะนำ: ปิด Thinking เพื่อตอบทันที)'
   },
   {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
+    tag: 'Sub-2s',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที สตรีมเรียลทาม'
+  },
+  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',
     tag: 'Flash',
@@ -39,6 +47,7 @@ const AI_MODELS = [
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints
 const MODEL_API_ENDPOINT_MAP = {
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview': 'gemini-3-flash-preview',
   'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };

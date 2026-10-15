@@ -262,14 +262,16 @@ const DEFAULT_CONFIG = {
 
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints (Main Flagship Models)
 const MODEL_API_ENDPOINT_MAP = {
-  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview': 'gemini-3-flash-preview',
+  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };
 
 const TRAY_MODELS = [
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
 ];
 
@@ -657,7 +659,7 @@ function loadConfig() {
       }
 
       // Ensure defaultModel is set and strictly among allowed models
-      const validModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'];
+      const validModels = ['gemini-3.5-flash-lite', 'gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'];
       if (!currentConfig.defaultModel || !validModels.includes(currentConfig.defaultModel)) {
         currentConfig.defaultModel = 'gemini-3.5-flash-lite';
         configNeedsSave = true;
@@ -3360,16 +3362,63 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
 }
 
 // Helper: Execute Screen Vision Streaming Analysis
-async function executeScreenStreamAnalysis({ base64Data, modelId, event, croppedDataUrl = null }) {
+async function executeScreenStreamAnalysis({ base64Data, modelId, event, croppedDataUrl = null, rect = null }) {
   const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
 
   const isFlashLite = modelId && modelId.includes('flash-lite');
-  const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
   const endpointsToTry = getCandidateEndpoints(selectedModel);
   const startTime = Date.now();
+
+  // 1. Dynamic 1-Tile Vision Budgeting (768px Ceiling) & Perceptual Hash
+  let cleanBase64 = null;
+  let currentImageHash = null;
+  try {
+    const opt = await optimizeImageForAiVision(base64Data, { maxDimension: 768, rect });
+    cleanBase64 = opt.buffer.toString('base64');
+    currentImageHash = computeDHash(opt.buffer);
+  } catch (optErr) {
+    cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    try {
+      const b = Buffer.from(cleanBase64, 'base64');
+      currentImageHash = computeDHash(b);
+    } catch (e) {}
+  }
+
+  // 2. Perceptual Hash & 0ms Instant Memory Cache (Pillars 3 & 5)
+  if (currentImageHash) {
+    const cachedHit = globalAiScreenCache.get(currentImageHash, 'screen_analysis');
+    if (cachedHit) {
+      console.log('[Cache Hit] Returning instant 0ms cached screen stream analysis');
+      if (event && event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('gemini-stream-chunk', {
+          chunk: cachedHit,
+          type: 'analysis',
+          endpointUsed: selectedModel
+        });
+      }
+      let ocrText = '';
+      const ocrMatch = cachedHit.match(/###?\s*\[?(?:OCR|TEXT|ถอดข้อความ|ข้อความในภาพ|ถอดอักษร)\]?[\r\n]+([\s\S]*?)(?:###?\s*\[?(?:EXPLAIN|SUMMARY|TRANSLATE|ANSWER)|$)/i);
+      if (ocrMatch && ocrMatch[1]) {
+        ocrText = ocrMatch[1].trim();
+      }
+      const hitResult = {
+        success: true,
+        fullText: cachedHit,
+        ocrText,
+        durationSec: '0.001',
+        endpointUsed: selectedModel,
+        cached: true
+      };
+      if (croppedDataUrl) hitResult.croppedDataUrl = croppedDataUrl;
+      if (event && event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('gemini-stream-finish', hitResult);
+      }
+      return hitResult;
+    }
+  }
 
   const thinkingConf = getThinkingConfigForModel(selectedModel);
 
@@ -3390,10 +3439,6 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
 
   const analysisPromptText = unifiedPromptText;
 
-  const ocrPromptText = `หน้าที่ของคุณคือ: ทำการวิเคราะห์ภาพเพื่อ Optical Character Recognition (OCR) และ Document Layout Analysis (Layout & Spatial Composition)
-ถอดและคัดลอกข้อความทุกตัวอักษร ตัวเลข สัญลักษณ์ และโค้ดคอมพิวเตอร์ (Code Block) ที่ปรากฏในภาพต้นฉบับออกมาแบบ 100% ตัวต่อตัวอักษร รักษาการขึ้นบรรทัดใหม่
-หากมีตารางให้จัดเป็น ตาราง Markdown Table (| คอลัมน์ 1 | คอลัมน์ 2 |) ตาราง (Markdown Table) ตามโครงสร้างเดิม ห้ามแปล ห้ามสรุป ห้ามตัดทอนข้อความ เริ่มต้นแสดงผลลัพธ์ทันที ไม่อารัมภบท ไม่ทักทาย`;
-
   const payload = {
     contents: [
       {
@@ -3413,8 +3458,6 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
   const analysisPayload = payload;
   let usedEndpoint = selectedModel;
   try {
-    // In unified multi-category architecture, streams execute concurrently from t=0:
-    // Promise.allSettled([analysisPromise, ocrPromise])
     const streamRes = await executeSingleGeminiStream(apiKey, endpointsToTry, analysisPayload, (partText, ep) => {
       usedEndpoint = ep;
       if (event && event.sender && !event.sender.isDestroyed()) {
@@ -3435,6 +3478,11 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
       if (ocrMatch && ocrMatch[1]) {
         ocrText = ocrMatch[1].trim();
       }
+    }
+
+    // Save successful analysis into 0ms memory cache
+    if (currentImageHash && fullText && fullText.trim()) {
+      globalAiScreenCache.set(currentImageHash, 'screen_analysis', fullText);
     }
 
     const result = {
@@ -3474,7 +3522,19 @@ ipcMain.handle('gemini-analyze-screen-stream', async (event, { base64Image, mode
 
 // Unified Zero-Bounce IPC: Crops screen in RAM and immediately streams Gemini API without bounce
 ipcMain.handle('crop-and-analyze-screen-stream', async (event, { rect, modelId }) => {
-  const croppedDataUrl = await cropAreaDirect(rect);
+  let croppedDataUrl = null;
+  if (stagedScreenPayload && stagedScreenPayload.dataUrl && stagedScreenPayload.rect &&
+      Math.abs(stagedScreenPayload.rect.x - rect.x) <= 4 &&
+      Math.abs(stagedScreenPayload.rect.y - rect.y) <= 4 &&
+      Math.abs(stagedScreenPayload.rect.w - rect.w) <= 4 &&
+      Math.abs(stagedScreenPayload.rect.h - rect.h) <= 4 &&
+      (Date.now() - stagedScreenPayload.timestamp) < 6000) {
+    croppedDataUrl = stagedScreenPayload.dataUrl;
+    console.log('[Speculative Pre-stage Hit] Using in-memory pre-cropped buffer (0ms)');
+  } else {
+    croppedDataUrl = await cropAreaDirect(rect);
+  }
+
   if (!croppedDataUrl) {
     throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
   }
@@ -3482,7 +3542,8 @@ ipcMain.handle('crop-and-analyze-screen-stream', async (event, { rect, modelId }
     base64Data: croppedDataUrl,
     modelId,
     event,
-    croppedDataUrl
+    croppedDataUrl,
+    rect
   });
 });
 
