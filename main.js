@@ -6,6 +6,7 @@ const geminiTools = require('./gemini_tools.js');
 const nativeBridge = require('./nativeBridge');
 const { optimizeImageForAiVision } = require('./imagePipeline');
 const { computeDHash, ImageCacheManager } = require('./imageHasher');
+const { GeminiLiveClient } = require('./gemini_live');
 
 const globalAiScreenCache = new ImageCacheManager(100);
 
