@@ -5,6 +5,9 @@ const crypto = require('crypto');
 const geminiTools = require('./gemini_tools.js');
 const nativeBridge = require('./nativeBridge');
 const { optimizeImageForAiVision } = require('./imagePipeline');
+const { computeDHash, ImageCacheManager } = require('./imageHasher');
+
+const globalAiScreenCache = new ImageCacheManager(100);
 
 // --- SPECULATIVE CONNECTION PRE-WARMING ENGINE ---
 function prewarmGeminiConnection() {
@@ -4085,6 +4088,38 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 4096;
   const imageToUse = imageBase64 || lastCapturedScreenImage;
 
+  // Check Perceptual Image Hash 0ms Cache for identical screen regions & questions
+  let currentImageHash = null;
+  if (imageToUse) {
+    try {
+      const commaIdx = imageToUse.indexOf(',');
+      const b64 = commaIdx !== -1 ? imageToUse.substring(commaIdx + 1) : imageToUse;
+      const buf = Buffer.from(b64, 'base64');
+      currentImageHash = computeDHash(buf);
+      const cacheKey = promptId || categoryName || resolvedCategory || optimizedPrompt;
+      const cachedHit = globalAiScreenCache.get(currentImageHash, cacheKey);
+      if (cachedHit) {
+        console.log('[Cache Hit] Returning instant 0ms cached answer for screen area');
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('quick-answer-chunk', { chunk: cachedHit });
+          event.sender.send('quick-answer-finish', {
+            fullText: cachedHit,
+            durationSec: '0.001',
+            endpointUsed: selectedModel,
+            cached: true
+          });
+        }
+        return {
+          success: true,
+          fullText: cachedHit,
+          durationSec: '0.001',
+          endpointUsed: selectedModel,
+          cached: true
+        };
+      }
+    } catch (e) {}
+  }
+
   // Always perform fresh AI dispatch (no cached stale bypass)
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
   const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
@@ -4168,6 +4203,10 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
     // Cache successful response in memory
     quickResponseCache.set(selectedModel, resolvedCategory, optimizedPrompt, cleanedFullText, usedEndpoint);
+    if (currentImageHash) {
+      const cacheKey = promptId || categoryName || resolvedCategory || optimizedPrompt;
+      globalAiScreenCache.set(currentImageHash, cacheKey, cleanedFullText);
+    }
 
     // Automatically record to AI history
     const catDisplayName = categoryName || resolvedCategory || 'คำตอบ';
