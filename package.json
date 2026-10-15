@@ -6,6 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test:zero-latency": "node test_zero_latency_screen_ai.js",
     "dist": "electron-builder --win --x64 -c.win.target=nsis-web",
     "dist:offline": "electron-builder --win --x64 -c.win.target=nsis",
     "dist:portable": "electron-builder --win --x64 -c.win.target=portable"
