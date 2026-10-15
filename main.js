@@ -4116,6 +4116,9 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   }
   try {
     globalShortcut.unregister('Escape');
+    globalShortcut.register('Escape', () => {
+      closeQuickTextMode(true);
+    });
   } catch (e) {}
   // Restore original clipboard when user starts sending prompt to AI
   try {
@@ -4318,6 +4321,9 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
   isAnswerCardActive = true;
   try {
     globalShortcut.unregister('Escape');
+    globalShortcut.register('Escape', () => {
+      closeQuickTextMode(true);
+    });
   } catch (e) {}
   try {
     restoreActiveClipboard();

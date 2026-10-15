@@ -347,11 +347,7 @@ window.addEventListener('keydown', (e) => {
       toggleQuickCustomInput(false);
       return;
     }
-    const answerCard = document.getElementById('quickAnswerCard');
-    if (answerCard && answerCard.style.display !== 'none' && answerCard.style.display !== '') {
-      closeQuickAnswerCard();
-      return;
-    }
+    closeQuickAnswerCard();
     closeQuickTextUI();
     return;
   }
@@ -1812,6 +1808,9 @@ function closeQuickAnswerCard() {
   if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
     window.electronAPI.resizeToolbarWindow({ height: 58 });
   }
+
+  // Dismiss and close entire toolbar UI cleanly so options window does not linger
+  closeQuickTextUI();
 }
 
 function escapeHtml(str) {

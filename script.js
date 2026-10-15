@@ -3859,11 +3859,7 @@ function setupQuickTextKeyboardListener() {
         }
         return;
       }
-      const answerCard = document.getElementById('quickAnswerCard');
-      if (answerCard && answerCard.style.display !== 'none' && answerCard.style.display !== '') {
-        closeQuickAnswerCard();
-        return;
-      }
+      closeQuickAnswerCard();
       closeQuickTextUI();
       return;
     }
@@ -4915,20 +4911,14 @@ function closeQuickAnswerCard() {
   }
 
   stopQuickSpeak();
-  if (isSnippingActive && box && box.w >= 10) {
-    updateSmartScreenToolbarPosition(box);
-  } else {
-    if (canvas && ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      canvas.style.display = 'none';
-    }
-    const container = document.getElementById('quickTextContainer');
-    if (container) container.style.display = 'none';
-    setContainerMousePassThrough(true);
-    if (window.electronAPI) {
-      window.electronAPI.hideWindow();
-    }
+  if (canvas && ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = 'none';
   }
+  const container = document.getElementById('quickTextContainer');
+  if (container) container.style.display = 'none';
+  setContainerMousePassThrough(true);
+  closeQuickTextUI();
 }
 
 let userResizedAnswerHeight = null;
