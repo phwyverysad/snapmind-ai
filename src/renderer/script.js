@@ -774,16 +774,13 @@ function loadFrozenScreenImage(dataUrl) {
 }
 
 function enforceAllModalsHidden() {
-  const ids = [
+  const modalIds = [
     'aiWindow',
     'settingsModal',
     'historyModal',
-    'promptEditorModal',
-    'quickTextContainer',
-    'quickAnswerCard',
-    'quickCustomBox'
+    'promptEditorModal'
   ];
-  for (const id of ids) {
+  for (const id of modalIds) {
     const el = document.getElementById(id);
     if (el) {
       el.style.display = 'none';
@@ -791,6 +788,34 @@ function enforceAllModalsHidden() {
       el.style.opacity = '0';
     }
   }
+  const overlays = document.querySelectorAll('.modal-overlay');
+  overlays.forEach(ov => {
+    ov.style.display = 'none';
+    ov.style.visibility = 'hidden';
+    ov.style.opacity = '0';
+  });
+
+  // Reset quick toolbar and answer card cleanly without inline visibility/opacity trap
+  const quickCont = document.getElementById('quickTextContainer');
+  if (quickCont) {
+    quickCont.style.display = 'none';
+    quickCont.style.visibility = '';
+    quickCont.style.opacity = '';
+    quickCont.style.pointerEvents = 'none';
+  }
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'none';
+    answerCard.style.visibility = '';
+    answerCard.style.opacity = '';
+  }
+  const customBox = document.getElementById('quickCustomBox');
+  if (customBox) {
+    customBox.style.display = 'none';
+    customBox.style.visibility = '';
+    customBox.style.opacity = '';
+  }
+  document.body.classList.remove('toolbar-visible');
 }
 
 // startSnippingUI() {
@@ -3152,7 +3177,11 @@ async function exportResultFileDialog() {
 }
 
 function closeAiWindow() {
-  enforceAllModalsHidden();
+  if (aiWindow) {
+    aiWindow.style.display = 'none';
+    aiWindow.style.visibility = 'hidden';
+    aiWindow.style.opacity = '0';
+  }
   stopLaserScan();
   stopSpeechSynthesis();
   const settingsModal = document.getElementById('settingsModal');
@@ -3321,7 +3350,12 @@ function handleThinkingToggleChange(modelId, isChecked) {
 }
 
 function closeSettingsModal() {
-  enforceAllModalsHidden();
+  const modal = document.getElementById('settingsModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.opacity = '0';
+  }
   if (canvas && ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -3498,7 +3532,12 @@ async function openHistoryModal() {
 
 function closeHistoryModal() {
   const isOpeningItem = arguments[0] === true;
-  enforceAllModalsHidden();
+  const modal = document.getElementById('historyModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.visibility = 'hidden';
+    modal.style.opacity = '0';
+  }
   if (canvas && ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -4151,6 +4190,9 @@ function showQuickAnswerState(actionName) {
   }
   if (answerCard) {
     answerCard.style.display = 'flex';
+    answerCard.style.visibility = 'visible';
+    answerCard.style.opacity = '1';
+    answerCard.style.pointerEvents = 'auto';
     if (window.electronAPI && window.electronAPI.setToolbarAnswerActive) {
       window.electronAPI.setToolbarAnswerActive(true);
     }
@@ -4450,14 +4492,22 @@ function toggleQuickCustomInput(forceState) {
     if (actionsList) actionsList.style.display = 'none';
     if (customToggleBtn) customToggleBtn.style.display = 'none';
     if (cancelBtn) cancelBtn.style.display = 'none';
-    if (customBox) customBox.style.display = 'flex';
+    if (customBox) {
+      customBox.style.display = 'flex';
+      customBox.style.visibility = 'visible';
+      customBox.style.opacity = '1';
+    }
     if (toolbar) toolbar.classList.add('custom-mode');
     if (input) {
       input.value = '';
       setTimeout(() => input.focus(), 50);
     }
   } else {
-    if (customBox) customBox.style.display = 'none';
+    if (customBox) {
+      customBox.style.display = 'none';
+      customBox.style.visibility = '';
+      customBox.style.opacity = '';
+    }
     if (toolbar) toolbar.classList.remove('custom-mode');
     if (actionsList) actionsList.style.display = 'flex';
     if (customToggleBtn) customToggleBtn.style.display = 'inline-flex';
@@ -4796,7 +4846,11 @@ function showSmartScreenToolbar(targetBox) {
   if (toolbar) toolbar.classList.remove('custom-mode');
 
   const customBox = document.getElementById('quickCustomBox');
-  if (customBox) customBox.style.display = 'none';
+  if (customBox) {
+    customBox.style.display = 'none';
+    customBox.style.visibility = '';
+    customBox.style.opacity = '';
+  }
 
   const actionsList = document.getElementById('quickActionsList');
   if (actionsList) actionsList.style.display = 'flex';
@@ -4810,10 +4864,13 @@ function showSmartScreenToolbar(targetBox) {
   const answerCard = document.getElementById('quickAnswerCard');
   if (answerCard) {
     answerCard.style.display = 'none';
+    answerCard.style.visibility = '';
+    answerCard.style.opacity = '';
   }
   isScreenPromptExecuting = false;
 
   container.style.display = 'flex';
+  container.style.visibility = 'visible';
   container.style.opacity = '1';
   container.style.pointerEvents = 'auto';
 
@@ -4832,7 +4889,7 @@ function hideSmartScreenToolbar(temporary = false, force = false) {
   } else {
     const answerCard = document.getElementById('quickAnswerCard');
     const isAnswerActive = answerCard && answerCard.style.display !== 'none' && answerCard.style.display !== '';
-    if (isAnswerCardPinned || isAnswerActive || isScreenPromptExecuting) {
+    if (!force && (isAnswerCardPinned || isAnswerActive || isScreenPromptExecuting)) {
       return;
     }
     isScreenPromptExecuting = false;
@@ -4841,9 +4898,20 @@ function hideSmartScreenToolbar(temporary = false, force = false) {
     }
     document.body.classList.remove('toolbar-visible');
     container.style.display = 'none';
-    if (answerCard) answerCard.style.display = 'none';
+    container.style.visibility = '';
+    container.style.opacity = '';
+    container.style.pointerEvents = 'none';
+    if (answerCard) {
+      answerCard.style.display = 'none';
+      answerCard.style.visibility = '';
+      answerCard.style.opacity = '';
+    }
     const customBox = document.getElementById('quickCustomBox');
-    if (customBox) customBox.style.display = 'none';
+    if (customBox) {
+      customBox.style.display = 'none';
+      customBox.style.visibility = '';
+      customBox.style.opacity = '';
+    }
     const toolbar = document.getElementById('quickTextToolbar');
     if (toolbar) toolbar.classList.remove('custom-mode');
     stopQuickSpeak();
@@ -4884,7 +4952,12 @@ function togglePinQuickAnswer() {
 }
 
 function closeQuickAnswerCard() {
-  enforceAllModalsHidden();
+  const answerCard = document.getElementById('quickAnswerCard');
+  if (answerCard) {
+    answerCard.style.display = 'none';
+    answerCard.style.visibility = '';
+    answerCard.style.opacity = '';
+  }
   if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
     window.electronAPI.cancelAiGeneration();
   }
