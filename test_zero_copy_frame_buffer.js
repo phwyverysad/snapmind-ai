@@ -11,3 +11,4 @@ const result = nativeBridge.cropRectDirectToBuffer(testRect);
 assert(result === null || Buffer.isBuffer(result), 'cropRectDirectToBuffer must return a Node.js Buffer or null when display is uninitialized');
 
 console.log('[TEST] Zero-Copy Frame Buffer API test passed.');
+process.exit(0);
