@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const geminiTools = require('./gemini_tools.js');
 const nativeBridge = require('./nativeBridge');
+const { optimizeImageForAiVision } = require('./imagePipeline');
 
 // --- SPECULATIVE CONNECTION PRE-WARMING ENGINE ---
 function prewarmGeminiConnection() {
