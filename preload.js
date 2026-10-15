@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Screen Snipping & Capture
   cropArea: (bounds) => ipcRenderer.invoke('crop-area', bounds),
   screenAreaSelected: (rect, preCroppedDataUrl) => ipcRenderer.invoke('screen-area-selected', rect, preCroppedDataUrl),
+  prestageScreenSelection: (rect) => ipcRenderer.send('speculative-pre-stage-image', rect),
+  cancelSpeculativePrestage: () => ipcRenderer.send('cancel-speculative-prestage'),
   startNativeScreenSelection: (autoConfirm) => ipcRenderer.invoke('start-native-screen-selection', autoConfirm),
   isNativeCaptureAvailable: () => ipcRenderer.invoke('is-native-capture-available'),
   getDisplayBounds: () => ipcRenderer.invoke('get-display-bounds'),

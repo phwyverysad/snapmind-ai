@@ -880,6 +880,9 @@ function cancelSnippingUI(fromMain = false) {
   if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
     window.electronAPI.cancelAiGeneration();
   }
+  if (window.electronAPI && window.electronAPI.cancelSpeculativePrestage) {
+    window.electronAPI.cancelSpeculativePrestage();
+  }
   isScreenPromptExecuting = false;
   document.body.classList.remove('toolbar-visible');
   document.body.classList.remove('snipping-active');
@@ -1379,6 +1382,9 @@ window.addEventListener('mouseup', async (e) => {
     if (box.w >= 8 && box.h >= 8) {
       isSnippingActive = true;
       if (canvas) canvas.style.display = 'block';
+      if (window.electronAPI && window.electronAPI.prestageScreenSelection) {
+        window.electronAPI.prestageScreenSelection({ x: box.x, y: box.y, w: box.w, h: box.h });
+      }
       showSmartScreenToolbar(box);
       requestDrawScene();
     } else if (savedPreviousBox && savedPreviousBox.w >= 8) {

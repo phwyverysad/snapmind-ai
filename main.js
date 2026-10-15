@@ -325,6 +325,7 @@ function getThinkingConfigForModel(modelId) {
 let activeAiAbortController = null;
 
 function abortActiveAiGeneration() {
+  cancelStagedSpeculativeUpload();
   if (activeAiAbortController) {
     try {
       activeAiAbortController.abort();
@@ -1418,8 +1419,18 @@ async function startScreenAreaToolbarMode(rect, preCroppedDataUrl = null, autoEx
     return null;
   }
 
-  // Ultra-fast crop directly from in-memory GDI snapshot (< 1ms)
+  // Ultra-fast crop: reuse speculative pre-staged image if available (< 0.01ms)
   let croppedDataUrl = preCroppedDataUrl;
+  if (!croppedDataUrl && stagedScreenPayload && stagedScreenPayload.rect) {
+    const rx = Math.abs(stagedScreenPayload.rect.x - rect.x);
+    const ry = Math.abs(stagedScreenPayload.rect.y - rect.y);
+    const rw = Math.abs(stagedScreenPayload.rect.w - rect.w);
+    const rh = Math.abs(stagedScreenPayload.rect.h - rect.h);
+    if (rx <= 4 && ry <= 4 && rw <= 4 && rh <= 4 && stagedScreenPayload.dataUrl) {
+      console.log('[Speculative Pre-stage Hit] Utilizing pre-staged image buffer at 0ms');
+      croppedDataUrl = stagedScreenPayload.dataUrl;
+    }
+  }
   if (!croppedDataUrl) {
     try {
       croppedDataUrl = await cropAreaDirect(rect);
@@ -2673,6 +2684,47 @@ ipcMain.handle('gemini-file-search-delete-store', async (event, { storeName, for
 
 ipcMain.handle('gemini-tools-execute-function', async (event, { name, args }) => {
   return await geminiTools.executeToolFunction(name, args);
+});
+
+// Speculative Pre-fetching & Instant Quota Guard State
+let stagedScreenPayload = null;
+let stagedAbortController = null;
+
+function cancelStagedSpeculativeUpload() {
+  if (stagedAbortController) {
+    try {
+      stagedAbortController.abort();
+      console.log('[Quota Guard] Speculative upload canceled immediately on Esc/Close');
+    } catch (e) {}
+    stagedAbortController = null;
+  }
+  stagedScreenPayload = null;
+}
+
+ipcMain.on('speculative-pre-stage-image', async (event, rect) => {
+  cancelStagedSpeculativeUpload();
+  stagedAbortController = new AbortController();
+  try {
+    if (!rect || rect.w < 8 || rect.h < 8) return;
+    const croppedBuffer = nativeBridge ? nativeBridge.cropRectDirectToBuffer(rect) : null;
+    if (croppedBuffer) {
+      const optimized = await optimizeImageForAiVision(croppedBuffer, { rect });
+      stagedScreenPayload = {
+        rect,
+        buffer: optimized.buffer,
+        dataUrl: optimized.dataUrl,
+        isTextPreserved: optimized.isTextPreserved,
+        timestamp: Date.now()
+      };
+      prewarmGeminiConnection();
+    }
+  } catch (err) {
+    console.warn('[Speculative Pre-stage Error]', err.message);
+  }
+});
+
+ipcMain.on('cancel-speculative-prestage', () => {
+  cancelStagedSpeculativeUpload();
 });
 
 // Snapshot & Freeze Frame IPC Handlers
