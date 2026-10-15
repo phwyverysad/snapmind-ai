@@ -773,10 +773,31 @@ function loadFrozenScreenImage(dataUrl) {
   }
 }
 
+function enforceAllModalsHidden() {
+  const ids = [
+    'aiWindow',
+    'settingsModal',
+    'historyModal',
+    'promptEditorModal',
+    'quickTextContainer',
+    'quickAnswerCard',
+    'quickCustomBox'
+  ];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.display = 'none';
+      el.style.visibility = 'hidden';
+      el.style.opacity = '0';
+    }
+  }
+}
+
 // startSnippingUI() {
 function startSnippingUI(payload = null) {
   savedPreviousBox = null;
   isAnswerCardPinned = false;
+  enforceAllModalsHidden();
   const pinBtn = document.getElementById('quickPinBtn');
   if (pinBtn) pinBtn.classList.remove('pinned');
   const pinLabel = document.getElementById('quickPinLabel');
@@ -829,33 +850,7 @@ function startSnippingUI(payload = null) {
   if (ctx && canvas) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
-  const aiWin = document.getElementById('aiWindow');
-  if (aiWin) {
-    aiWin.style.display = 'none';
-    aiWin.style.visibility = 'hidden';
-    aiWin.style.opacity = '0';
-  }
-
-  const settingsModal = document.getElementById('settingsModal');
-  if (settingsModal) {
-    settingsModal.style.display = 'none';
-    settingsModal.style.visibility = 'hidden';
-    settingsModal.style.opacity = '0';
-  }
-  const historyModal = document.getElementById('historyModal');
-  if (historyModal) {
-    historyModal.style.display = 'none';
-    historyModal.style.visibility = 'hidden';
-    historyModal.style.opacity = '0';
-  }
-  const quickCont = document.getElementById('quickTextContainer');
-  if (quickCont) {
-    quickCont.style.display = 'none';
-  }
-  const answerCard = document.getElementById('quickAnswerCard');
-  if (answerCard) {
-    answerCard.style.display = 'none';
-  }
+  enforceAllModalsHidden();
   isScreenPromptExecuting = false;
   lastScreenExecutionParams = null;
 
@@ -869,6 +864,15 @@ function startSnippingUI(payload = null) {
   freezeFrames = [];
   setContainerMousePassThrough(false);
   resizeCanvasToVirtualScreen(bounds);
+
+  // Double requestAnimationFrame ensures Chromium compositor has committed the clean frame before uncloaking
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (window.electronAPI && typeof window.electronAPI.notifySnippingReady === 'function') {
+        window.electronAPI.notifySnippingReady();
+      }
+    });
+  });
 }
 
 function cancelSnippingUI(fromMain = false) {
@@ -888,6 +892,7 @@ function cancelSnippingUI(fromMain = false) {
   document.body.classList.remove('snipping-active');
   stopLaserScan();
   stopSpeechSynthesis();
+  enforceAllModalsHidden();
   freezeFrames = [];
   frozenScreenImage = null;
   screenSampleData = null;
@@ -3147,9 +3152,7 @@ async function exportResultFileDialog() {
 }
 
 function closeAiWindow() {
-  aiWindow.style.display = 'none';
-  aiWindow.style.visibility = 'hidden';
-  aiWindow.style.opacity = '0';
+  enforceAllModalsHidden();
   stopLaserScan();
   stopSpeechSynthesis();
   const settingsModal = document.getElementById('settingsModal');
@@ -3318,12 +3321,7 @@ function handleThinkingToggleChange(modelId, isChecked) {
 }
 
 function closeSettingsModal() {
-  const modal = document.getElementById('settingsModal');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.style.visibility = 'hidden';
-    modal.style.opacity = '0';
-  }
+  enforceAllModalsHidden();
   if (canvas && ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -3500,12 +3498,7 @@ async function openHistoryModal() {
 
 function closeHistoryModal() {
   const isOpeningItem = arguments[0] === true;
-  const modal = document.getElementById('historyModal');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.style.visibility = 'hidden';
-    modal.style.opacity = '0';
-  }
+  enforceAllModalsHidden();
   if (canvas && ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -4891,8 +4884,7 @@ function togglePinQuickAnswer() {
 }
 
 function closeQuickAnswerCard() {
-  const answerCard = document.getElementById('quickAnswerCard');
-  if (answerCard) answerCard.style.display = 'none';
+  enforceAllModalsHidden();
   if (window.electronAPI && window.electronAPI.cancelAiGeneration) {
     window.electronAPI.cancelAiGeneration();
   }

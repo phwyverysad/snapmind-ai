@@ -52,13 +52,16 @@ html, body {
   pointer-events: none !important;
 }
 
-/* Ensure AI window AND modals are NEVER visible when snipping mode is active */
+/* Ensure AI window, answer cards, and modals are NEVER visible when snipping mode is active */
 body.snipping-active .ai-response-window,
 body.snipping-active #aiWindow,
 body.snipping-active .modal-overlay,
 body.snipping-active #settingsModal,
 body.snipping-active #historyModal,
-body.snipping-active #promptEditorModal {
+body.snipping-active #promptEditorModal,
+body.snipping-active .quick-answer-card,
+body.snipping-active #quickAnswerCard,
+body.snipping-active:not(.toolbar-visible) #quickTextContainer {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;

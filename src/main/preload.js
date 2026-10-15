@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('freeze-screen-snapshot');
     ipcRenderer.on('freeze-screen-snapshot', (event, frames) => callback(frames));
   },
+  notifySnippingReady: () => ipcRenderer.send('snipping-ui-ready'),
 
   // Gemini AI Processing (Secure Main Process IPC)
   analyzeScreen: (base64Image, modelId) => ipcRenderer.invoke('gemini-analyze-screen', { base64Image, modelId }),

@@ -2010,29 +2010,38 @@ async function startSnippingMode() {
   currentFreezeSnapshot = null;
   stopTopmostKeeper();
 
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
-    try {
-      mainWindow.webContents.executeJavaScript(`
-        if (typeof hideSmartScreenToolbar === 'function') hideSmartScreenToolbar(false);
-        const scanCanvas = document.getElementById('scanCanvas');
-        if (scanCanvas) {
-          scanCanvas.style.display = 'none';
-          scanCanvas.style.backgroundImage = 'none';
-          const ctx2d = scanCanvas.getContext('2d');
-          if (ctx2d) ctx2d.clearRect(0, 0, scanCanvas.width, scanCanvas.height);
-        }
-        const quickCont = document.getElementById('quickTextContainer');
-        if (quickCont) quickCont.style.display = 'none';
-        const ansCard = document.getElementById('quickAnswerCard');
-        if (ansCard) ansCard.style.display = 'none';
-      `).catch(() => {});
+  // STEP 1: Immediately hide all visible UI and flush Windows DWM so GDI BitBlt captures clean desktop
+  let neededWait = false;
+  if (toolbarWindow && !toolbarWindow.isDestroyed() && toolbarWindow.isVisible()) {
+    toolbarWindow.hide();
+    neededWait = true;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isVisible()) {
+      try {
+        mainWindow.webContents.executeJavaScript(`
+          if (typeof enforceAllModalsHidden === 'function') enforceAllModalsHidden();
+          const scanCanvas = document.getElementById('scanCanvas');
+          if (scanCanvas) {
+            scanCanvas.style.display = 'none';
+            scanCanvas.style.backgroundImage = 'none';
+            const ctx2d = scanCanvas.getContext('2d');
+            if (ctx2d) ctx2d.clearRect(0, 0, scanCanvas.width, scanCanvas.height);
+          }
+        `).catch(() => {});
+      } catch (e) {}
       mainWindow.hide();
-      await new Promise(resolve => setTimeout(resolve, 50));
-    } catch (e) {}
+      neededWait = true;
+    }
+  }
+  unregisterToolbarShortcuts();
+
+  // If any window was previously visible, wait 50ms for Windows DWM compositor to fully remove it from screen
+  if (neededWait) {
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
 
   // Interactive Selection Overlay: Uses in-process C++ NativeScreenCapture.dll for instant GDI freeze
-  // Keeps selection on screen, renders 8 handles, allows move/resize, and presents Ctrl+Caps question choices.
   if (process.env.TEST_NATIVE_SNIP_WIN32 && nativeBridge && nativeBridge.isNativeCaptureAvailable()) {
     startNativeSnippingMode();
     return;
@@ -2043,12 +2052,7 @@ async function startSnippingMode() {
     nativeBridge.saveForegroundWindow(mainWindow);
   }
 
-  if (toolbarWindow && !toolbarWindow.isDestroyed()) {
-    toolbarWindow.hide();
-  }
-  unregisterToolbarShortcuts();
-
-  // Instant GDI Screen Freeze Capture into memory (< 15ms, 100% pristine screen view with CAPTUREBLT)
+  // STEP 2: Instant GDI Screen Freeze Capture into memory (< 15ms, 100% pristine screen view with CAPTUREBLT)
   let freezeDataUrl = null;
   try {
     if (nativeBridge && nativeBridge.captureScreenFreezeNative) {
@@ -2085,13 +2089,7 @@ async function startSnippingMode() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   isSnippingActive = true;
 
-  if (toolbarWindow && !toolbarWindow.isDestroyed()) {
-    toolbarWindow.hide();
-  }
-  unregisterToolbarShortcuts();
-
   const bounds = getCombinedDisplaysBounds();
-  // Enforce full-screen virtual bounds covering Windows taskbar BEFORE presentation
   const curBounds = mainWindow.getBounds();
   if (curBounds.x !== bounds.x || curBounds.y !== bounds.y || curBounds.width !== bounds.width || curBounds.height !== bounds.height) {
     mainWindow.setBounds(bounds);
@@ -2100,47 +2098,9 @@ async function startSnippingMode() {
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.setSkipTaskbar(true);
 
-  // Pre-cleanup DOM and GPU buffer BEFORE showing window to eliminate any flash of previous capture or answers
+  // STEP 3: Cloak window with opacity 0 so when DWM shows the window, zero old pixels can be seen
   try {
-    await mainWindow.webContents.executeJavaScript(`
-      document.body.classList.add('snipping-active');
-      const aiWin = document.getElementById('aiWindow');
-      if (aiWin) {
-        aiWin.style.display = 'none';
-        aiWin.style.visibility = 'hidden';
-        aiWin.style.opacity = '0';
-      }
-      const setModal = document.getElementById('settingsModal');
-      if (setModal) {
-        setModal.style.display = 'none';
-        setModal.style.visibility = 'hidden';
-        setModal.style.opacity = '0';
-      }
-      const histModal = document.getElementById('historyModal');
-      if (histModal) {
-        histModal.style.display = 'none';
-        histModal.style.visibility = 'hidden';
-        histModal.style.opacity = '0';
-      }
-      const quickCont = document.getElementById('quickTextContainer');
-      if (quickCont) {
-        quickCont.style.display = 'none';
-      }
-      const ansCard = document.getElementById('quickAnswerCard');
-      if (ansCard) {
-        ansCard.style.display = 'none';
-      }
-      const scanCanvas = document.getElementById('scanCanvas');
-      if (scanCanvas) {
-        scanCanvas.style.display = 'block';
-        scanCanvas.style.backgroundImage = 'none';
-        const ctx2d = scanCanvas.getContext('2d');
-        if (ctx2d) ctx2d.clearRect(0, 0, scanCanvas.width, scanCanvas.height);
-      }
-      if (typeof box !== 'undefined') {
-        box = { x: 0, y: 0, w: 0, h: 0 };
-      }
-    `);
+    mainWindow.setOpacity(0.0);
   } catch (e) {}
 
   // Forcibly disable all window transitions and cloak window before showing
@@ -2148,7 +2108,7 @@ async function startSnippingMode() {
     nativeBridge.disableWindowTransitionsNative(mainWindow);
   }
 
-  // Instant 0ms presentation without latency while keeping frame synchronization
+  // Show window while opacity is 0 (Completely invisible to user, allows Chromium to paint clean canvas)
   mainWindow.show();
   mainWindow.focus();
 
@@ -2168,9 +2128,16 @@ async function startSnippingMode() {
     }
   }, 25);
 
+  // STEP 4: Send snip payload to renderer (which draws canvas and fires snipping-ui-ready)
   const snipPayload = { bounds, freezeDataUrl };
-  mainWindow.webContents.send('start-snipping', snipPayload); // mainWindow.webContents.send('start-snipping');
-  mainWindow.webContents.send('freeze-screen-snapshot', freezeDataUrl);
+  mainWindow.webContents.send('start-snipping', snipPayload);
+
+  // Safety fallback: Uncloak opacity to 1.0 within 50ms if renderer callback is slightly delayed
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive) {
+      try { mainWindow.setOpacity(1.0); } catch (e) {}
+    }
+  }, 50);
 
   // Dynamically register Escape key ONLY while in snipping mode
   try {
@@ -2205,32 +2172,7 @@ function cancelSnippingMode() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
       mainWindow.webContents.executeJavaScript(`
-        const aiWin = document.getElementById('aiWindow');
-        if (aiWin) {
-          aiWin.style.display = 'none';
-          aiWin.style.visibility = 'hidden';
-          aiWin.style.opacity = '0';
-        }
-        const setModal = document.getElementById('settingsModal');
-        if (setModal) {
-          setModal.style.display = 'none';
-          setModal.style.visibility = 'hidden';
-          setModal.style.opacity = '0';
-        }
-        const histModal = document.getElementById('historyModal');
-        if (histModal) {
-          histModal.style.display = 'none';
-          histModal.style.visibility = 'hidden';
-          histModal.style.opacity = '0';
-        }
-        const quickCont = document.getElementById('quickTextContainer');
-        if (quickCont) {
-          quickCont.style.display = 'none';
-        }
-        const ansCard = document.getElementById('quickAnswerCard');
-        if (ansCard) {
-          ansCard.style.display = 'none';
-        }
+        if (typeof enforceAllModalsHidden === 'function') enforceAllModalsHidden();
         const scanCanvas = document.getElementById('scanCanvas');
         if (scanCanvas) {
           const ctx2d = scanCanvas.getContext('2d');
@@ -2245,6 +2187,7 @@ function cancelSnippingMode() {
     mainWindow.webContents.send('cancel-snipping-ui');
     mainWindow.setAlwaysOnTop(false);
     mainWindow.hide();
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
   }
 
   if (nativeBridge && nativeBridge.cancelNativeScreenCapture) {
@@ -2322,16 +2265,7 @@ function updateTrayContextMenu() {
     },
     {
       label: 'ประวัติการสแกน (History)',
-      click: () => {
-        openHistoryWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('cancel-snipping-ui');
-          mainWindow.setIgnoreMouseEvents(false);
-          mainWindow.show();
-          mainWindow.focus();
-          mainWindow.webContents.send('open-history-ui');
-        }
-      }
+      click: () => openHistoryWindow()
     },
     {
       label: 'เริ่มต้นอัตโนมัติเมื่อเปิด Windows',
@@ -2531,6 +2465,13 @@ ipcMain.handle('clear-history', () => {
 });
 
 ipcMain.on('trigger-scan', () => startSnippingMode());
+ipcMain.on('snipping-ui-ready', () => {
+  if (mainWindow && !mainWindow.isDestroyed() && isSnippingActive) {
+    try {
+      mainWindow.setOpacity(1.0);
+    } catch (e) {}
+  }
+});
 ipcMain.on('cancel-snipping', () => {
   isSnippingActive = false;
   cancelSnippingMode();
@@ -2545,6 +2486,7 @@ ipcMain.on('hide-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setAlwaysOnTop(false);
     mainWindow.hide();
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
   }
   if (nativeBridge && nativeBridge.restoreForegroundWindow) {
     nativeBridge.restoreForegroundWindow();
@@ -2554,6 +2496,7 @@ function openSettingsWindow() {
   isSnippingActive = false;
   try { globalShortcut.unregister('Escape'); } catch (e) {}
   if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
     mainWindow.webContents.send('cancel-snipping-ui');
     mainWindow.setIgnoreMouseEvents(false);
     mainWindow.setSkipTaskbar(true);
@@ -2575,6 +2518,8 @@ function openHistoryWindow() {
     toolbarWindow.hide();
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
+    mainWindow.webContents.send('cancel-snipping-ui');
     mainWindow.setIgnoreMouseEvents(false);
     mainWindow.setSkipTaskbar(true);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -2607,6 +2552,7 @@ ipcMain.on('forward-history-to-toolbar', (event, item) => {
 
 ipcMain.on('show-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
     mainWindow.setSkipTaskbar(true);
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.show();
@@ -2622,6 +2568,7 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
 
 ipcMain.handle('set-always-on-top', (event, flag) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.setOpacity(1.0); } catch (e) {}
     mainWindow.setSkipTaskbar(true);
     mainWindow.setAlwaysOnTop(flag, flag ? 'screen-saver' : 'normal');
     mainWindow.show();
