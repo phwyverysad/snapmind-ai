@@ -14,7 +14,7 @@
     "appId": "com.snapmind.ai",
     "productName": "SnapMind AI",
     "compression": "maximum",
-    "afterPack": "./clean-unpacked.js",
+    "afterPack": "./build/clean-unpacked.js",
     "electronLanguages": [
       "th",
       "en",
@@ -24,20 +24,9 @@
       "output": "dist"
     },
     "files": [
+      "src/**/*",
+      "assets/**/*",
       "main.js",
-      "preload.js",
-      "script.js",
-      "style.css",
-      "index.html",
-      "toolbar.html",
-      "toolbar.js",
-      "gemini_tools.js",
-      "gemini_live.js",
-      "imagePipeline.js",
-      "imageHasher.js",
-      "textCapture.js",
-      "nativeBridge.js",
-      "SnapMind.ico",
       "package.json",
       "!**/*.map",
       "!**/*.md",
@@ -53,15 +42,12 @@
       "!**/test/**",
       "!**/tests/**",
       "!**/test*/**",
-      "!test_*.js",
-      "!run_all_tests.js",
+      "!tests/**/*",
       "!*.cpp",
       "!*.obj",
       "!*.exp",
       "!*.lib",
-      "!*.cs",
-      "!*.exe",
-      "!เครื่องมือ.txt"
+      "!*.cs"
     ],
     "publish": {
       "provider": "github",
@@ -69,11 +55,23 @@
       "repo": "snapmind-ai"
     },
     "extraResources": [
-      "GeminiTextCopy.dll",
-      "hotkey_hook.dll",
-      "hotkey_hook.exe",
-      "NativeScreenCapture.dll",
-      "SnapMind.ico"
+      {
+        "from": "native",
+        "to": ".",
+        "filter": [
+          "GeminiTextCopy.dll",
+          "hotkey_hook.dll",
+          "hotkey_hook.exe",
+          "NativeScreenCapture.dll"
+        ]
+      },
+      {
+        "from": "assets",
+        "to": ".",
+        "filter": [
+          "SnapMind.ico"
+        ]
+      }
     ],
     "win": {
       "target": [
@@ -98,7 +96,7 @@
           ]
         }
       ],
-      "icon": "SnapMind.ico",
+      "icon": "assets/SnapMind.ico",
       "signExecutable": false
     },
     "portable": {
@@ -110,12 +108,12 @@
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
-      "include": "installer.nsh",
+      "include": "build/installer.nsh",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "SnapMind AI",
-      "installerIcon": "SnapMind.ico",
-      "uninstallerIcon": "SnapMind.ico",
+      "installerIcon": "assets/SnapMind.ico",
+      "uninstallerIcon": "assets/SnapMind.ico",
       "uninstallDisplayName": "SnapMind AI",
       "artifactName": "SnapMind_AI_WebSetup.exe"
     },
@@ -124,12 +122,12 @@
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
-      "include": "installer.nsh",
+      "include": "build/installer.nsh",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "SnapMind AI",
-      "installerIcon": "SnapMind.ico",
-      "uninstallerIcon": "SnapMind.ico",
+      "installerIcon": "assets/SnapMind.ico",
+      "uninstallerIcon": "assets/SnapMind.ico",
       "uninstallDisplayName": "SnapMind AI",
       "artifactName": "SnapMind_AI_Setup_Full.exe",
       "differentialPackage": false

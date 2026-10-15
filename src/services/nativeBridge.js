@@ -73,9 +73,15 @@ function initNativeBridge() {
 
   const candidatePaths = [
     path.join(__dirname, 'GeminiTextCopy.dll'),
+    path.join(__dirname, '..', '..', 'native', 'GeminiTextCopy.dll'),
+    path.join(__dirname, '..', '..', 'GeminiTextCopy.dll'),
     process.resourcesPath ? path.join(process.resourcesPath, 'GeminiTextCopy.dll') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'native', 'GeminiTextCopy.dll') : null,
     path.join(__dirname, 'hotkey_hook.dll'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'hotkey_hook.dll') : null
+    path.join(__dirname, '..', '..', 'native', 'hotkey_hook.dll'),
+    path.join(__dirname, '..', '..', 'hotkey_hook.dll'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'hotkey_hook.dll') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'native', 'hotkey_hook.dll') : null
   ].filter(Boolean);
 
   let targetDll = null;
@@ -530,8 +536,11 @@ function initNativeCapture() {
 
   const candidatePaths = [
     path.join(__dirname, 'NativeScreenCapture.dll'),
-    path.join(__dirname, 'native_capture', 'NativeScreenCapture.dll'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'NativeScreenCapture.dll') : null
+    path.join(__dirname, '..', '..', 'native', 'NativeScreenCapture.dll'),
+    path.join(__dirname, '..', '..', 'native', 'native_capture', 'NativeScreenCapture.dll'),
+    path.join(__dirname, '..', '..', 'NativeScreenCapture.dll'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'NativeScreenCapture.dll') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'native', 'NativeScreenCapture.dll') : null
   ].filter(Boolean);
 
   let targetDll = null;

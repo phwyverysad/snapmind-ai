@@ -10,11 +10,16 @@ let activeClipboardBackup = null;
 let activeToolbarCapturedText = '';
 
 function getNativeHookExePath() {
-  const localExe = path.join(__dirname, 'hotkey_hook.exe');
-  if (fs.existsSync(localExe)) return localExe;
-  if (process.resourcesPath) {
-    const resExe = path.join(process.resourcesPath, 'hotkey_hook.exe');
-    if (fs.existsSync(resExe)) return resExe;
+  const candidates = [
+    path.join(__dirname, 'hotkey_hook.exe'),
+    path.join(__dirname, '..', '..', 'native', 'hotkey_hook.exe'),
+    path.join(__dirname, '..', '..', 'hotkey_hook.exe'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'hotkey_hook.exe') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'native', 'hotkey_hook.exe') : null
+  ].filter(Boolean);
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
   }
   return null;
 }
