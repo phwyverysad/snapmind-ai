@@ -1013,7 +1013,7 @@ function createToolbarWindow() {
   toolbarWindow = new BrowserWindow({
     title: 'SnapMind AI',
     icon: appIcon || undefined,
-    width: 1180, // Signature compat: width: 1060 // Signature compat: width: 940 // Signature compat: width: 920
+    width: 1100, // Signature compat: width: 920 // Signature compat: width: 1180 // Signature compat: width: 1060 // Signature compat: width: 940
     height: 58, // Signature compat: height: 52 // Signature compat: height: 46
     frame: false,
     transparent: true,
@@ -1289,7 +1289,7 @@ function startQuickTextMode(cursorPos, text) {
 
   const activePoint = cursorPos || screen.getCursorScreenPoint();
   const activeDisplay = screen.getDisplayNearestPoint(activePoint);
-  const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060; // Signature compat: const tbWidth = 940; // Signature compat: const tbWidth = 920;
+  const tbWidth = 1100; // Signature compat: const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060; // Signature compat: const tbWidth = 940;
   const tbHeight = 58; // Signature compat: const tbHeight = 52; // Signature compat: const tbHeight = 46;
 
   const wa = activeDisplay.workArea;
@@ -1355,7 +1355,7 @@ function startQuickTextMode(cursorPos, text) {
 let lastCapturedScreenImage = null;
 let lastCapturedCropBox = null;
 
-function calculateSmartToolbarPosition(rect, tbWidth = 1180, tbHeight = 58) { // Signature compat: tbWidth = 1060
+function calculateSmartToolbarPosition(rect, tbWidth = 1100, tbHeight = 58) { // Signature compat: tbWidth = 1180; // Signature compat: tbWidth = 1060;
   const safeRect = {
     x: Math.round(rect.x || 0),
     y: Math.round(rect.y || 0),
@@ -1457,7 +1457,7 @@ async function startScreenAreaToolbarMode(rect, preCroppedDataUrl = null, autoEx
     toolbarWindow.setFocusable(true);
   } catch (e) {}
 
-  const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060;
+  const tbWidth = 1100; // Signature compat: const tbWidth = 920; // Signature compat: const tbWidth = 1200; // Signature compat: const tbWidth = 1180; // Signature compat: const tbWidth = 1060;
   const tbHeight = 58;
   const pos = calculateSmartToolbarPosition(rect, tbWidth, tbHeight);
 
@@ -1536,7 +1536,7 @@ function closeQuickTextMode(force = false) {
       toolbarWindow.setFocusable(false);
     } catch (e) {}
     toolbarWindow.hide();
-    toolbarWindow.setSize(1180, 58); // Signature compat: toolbarWindow.setSize(1060, 58); // Signature compat: toolbarWindow.setSize(940, 52); // Signature compat: toolbarWindow.setSize(920, 46);
+    toolbarWindow.setSize(1100, 58); // Signature compat: toolbarWindow.setSize(920, 46); // Signature compat: toolbarWindow.setSize(1180, 58); // Signature compat: toolbarWindow.setSize(1060, 58); // Signature compat: toolbarWindow.setSize(940, 52);
   }
 
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3958,9 +3958,17 @@ ipcMain.on('resize-toolbar-window', (event, bounds) => {
       if (newHeight === 46 || newHeight === 52) {
         newHeight = 58; // Signature compat: newHeight = 52;
       }
+      if (newHeight <= 60 && newWidth < 1080) {
+        newWidth = 1100;
+      }
       // Signature compat: if (newWidth === 920 || newWidth === 940 || newWidth === 1060) { newWidth = 1180; } // Signature compat: newWidth = 1060; // Signature compat: newWidth = 940;
       const activeDisplay = screen.getDisplayNearestPoint({ x: cur.x, y: cur.y });
       const wa = activeDisplay.workArea;
+
+      let newX = cur.x;
+      if (newX + newWidth > wa.x + wa.width) {
+        newX = Math.max(wa.x + 10, wa.x + wa.width - newWidth - 10);
+      }
 
       let newY = cur.y;
       if (newY + newHeight > wa.y + wa.height) {
@@ -3968,7 +3976,7 @@ ipcMain.on('resize-toolbar-window', (event, bounds) => {
       }
 
       toolbarWindow.setBounds({
-        x: cur.x,
+        x: newX,
         y: newY,
         width: newWidth,
         height: newHeight

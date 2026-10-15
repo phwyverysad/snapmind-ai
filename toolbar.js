@@ -469,12 +469,14 @@ function handleOpenToolbar({ text, prompts, image, cropBox, sourceType, autoExec
     // Reset window height to 46px and ensure dynamic width fits toolbar with generous margin
     if (window.electronAPI && window.electronAPI.resizeToolbarWindow) {
       const tbEl = document.getElementById('quickTextToolbar');
-      const reqW = tbEl ? Math.max(898, Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth) + 4) : 920; // Signature compat: Math.max(1200, Math.ceil(tbEl.scrollWidth) + 40) // Signature compat: Math.max(1180, Math.ceil(tbEl.scrollWidth) + 36) // Signature compat: Math.max(1060, Math.ceil(tbEl.scrollWidth) + 36)
+      const naturalW = tbEl ? Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth || 0) : 1038;
+      const reqW = Math.max(1100, naturalW + 56); // Signature compat: Math.max(898, Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth) + 4) : 920; // Signature compat: Math.max(1200, Math.ceil(tbEl.scrollWidth) + 40) // Signature compat: Math.max(1180, Math.ceil(tbEl.scrollWidth) + 36) // Signature compat: Math.max(1060, Math.ceil(tbEl.scrollWidth) + 36)
       window.electronAPI.resizeToolbarWindow({ width: reqW, height: 46 });
       requestAnimationFrame(() => {
         const measuredTb = document.getElementById('quickTextToolbar');
         if (measuredTb && window.electronAPI && window.electronAPI.resizeToolbarWindow) {
-          const dynamicW = Math.max(898, Math.ceil(measuredTb.scrollWidth || measuredTb.offsetWidth) + 4);
+          const mNatural = Math.ceil(measuredTb.scrollWidth || measuredTb.offsetWidth || 0);
+          const dynamicW = Math.max(1100, mNatural + 56);
           if (dynamicW > reqW) {
             window.electronAPI.resizeToolbarWindow({ width: dynamicW, height: 46 });
           }
@@ -1537,7 +1539,7 @@ function toggleQuickCustomInput(forceState) {
       }
       if (window.electronAPI.resizeToolbarWindow) {
         window.electronAPI.resizeToolbarWindow({ height: 86 });
-        window.electronAPI.resizeToolbarWindow({ width: 920, height: 46 });
+        window.electronAPI.resizeToolbarWindow({ width: 1100, height: 46 }); // Signature compat: window.electronAPI.resizeToolbarWindow({ width: 920, height: 46 });
       }
       if (window.electronAPI.setToolbarFocusable) {
         window.electronAPI.setToolbarFocusable(true);
@@ -1568,7 +1570,8 @@ function toggleQuickCustomInput(forceState) {
       if (window.electronAPI.resizeToolbarWindow) {
         window.electronAPI.resizeToolbarWindow({ height: 46 });
         const tbEl = document.getElementById('quickTextToolbar');
-        const reqW = tbEl ? Math.max(898, Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth) + 4) : 920; // Signature compat: Math.max(1180, Math.ceil(tbEl.scrollWidth) + 36) // Signature compat: Math.max(1060, Math.ceil(tbEl.scrollWidth) + 36)
+        const naturalW = tbEl ? Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth || 0) : 1038;
+        const reqW = Math.max(1100, naturalW + 56); // Signature compat: Math.max(898, Math.ceil(tbEl.scrollWidth || tbEl.offsetWidth) + 4) : 920; // Signature compat: Math.max(1180, Math.ceil(tbEl.scrollWidth) + 36) // Signature compat: Math.max(1060, Math.ceil(tbEl.scrollWidth) + 36)
         window.electronAPI.resizeToolbarWindow({ width: reqW, height: 46 });
       }
     }
