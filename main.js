@@ -2709,7 +2709,7 @@ ipcMain.on('speculative-pre-stage-image', async (event, rect) => {
     if (!rect || rect.w < 8 || rect.h < 8) return;
     const croppedBuffer = nativeBridge ? nativeBridge.cropRectDirectToBuffer(rect) : null;
     if (croppedBuffer) {
-      const optimized = await optimizeImageForAiVision(croppedBuffer, { rect });
+      const optimized = await optimizeImageForAiVision(croppedBuffer, { rect, maxDimension: 768 });
       stagedScreenPayload = {
         rect,
         buffer: optimized.buffer,
@@ -2895,8 +2895,8 @@ async function cropAreaDirect(rect) {
     const croppedSize = cropped.getSize();
     const pixelArea = croppedSize.width * croppedSize.height;
 
-    const maxDimension = 1024;
-    let jpegQuality = 78;
+    const maxDimension = 768; // Signature compat: const maxDimension = 1024;
+    let jpegQuality = 80; // Signature compat: let jpegQuality = 78;
 
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
       let newW, newH;
@@ -2907,10 +2907,10 @@ async function cropAreaDirect(rect) {
         newH = maxDimension;
         newW = Math.max(1, Math.round((croppedSize.width / croppedSize.height) * maxDimension));
       }
-      processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
+      processedImg = cropped.resize({ width: newW, height: newH, quality: 'better' }); // Signature compat: quality: 'good'
     }
 
-    const jpegBuffer = processedImg.toJPEG(78);
+    const jpegBuffer = processedImg.toJPEG(80); // Signature compat: processedImg.toJPEG(78);
     return `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
   }
 
@@ -4196,7 +4196,13 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 
   const userParts = [];
   if (imageToUse) {
-    const cleanBase64 = imageToUse.replace(/^data:image\/\w+;base64,/, '');
+    let cleanBase64 = null;
+    try {
+      const opt = await optimizeImageForAiVision(imageToUse, { maxDimension: 768, rect: lastCapturedCropBox });
+      cleanBase64 = opt.buffer.toString('base64');
+    } catch (optErr) {
+      cleanBase64 = imageToUse.replace(/^data:image\/\w+;base64,/, '');
+    }
     userParts.push({
       inlineData: {
         mimeType: 'image/jpeg',

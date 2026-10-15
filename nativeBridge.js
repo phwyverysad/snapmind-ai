@@ -826,9 +826,26 @@ function captureScreenFreezeNative(quality = 92) {
 }
 
 function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
+  const isLargeArea = rect && (rect.w > 768 || rect.h > 768);
+  const maxDimension = isLargeArea ? 768 : 768; // Signature compat: const maxDimension = isLargeArea ? 1024 : 800; // 1280 : 1024
+
   // Ultra-fast path: Native C++ Crop to JPEG in RAM (< 1.5ms, zero disk I/O)
   const fastCrop = cropFreezeImageNativeFast(rect);
   if (fastCrop) {
+    if (!isLargeArea) return fastCrop;
+    try {
+      const { nativeImage } = require('electron');
+      if (nativeImage) {
+        const img = nativeImage.createFromDataURL(fastCrop);
+        const sz = img.getSize();
+        if (sz.width > 768 || sz.height > 768) {
+          const newW = sz.width >= sz.height ? 768 : Math.max(1, Math.round((sz.width / sz.height) * 768));
+          const newH = sz.height > sz.width ? 768 : Math.max(1, Math.round((sz.height / sz.width) * 768));
+          const resized = img.resize({ width: newW, height: newH, quality: 'better' });
+          return 'data:image/jpeg;base64,' + resized.toJPEG(80).toString('base64');
+        }
+      }
+    } catch (e) {}
     return fastCrop;
   }
 
@@ -854,8 +871,6 @@ function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
     // Adaptive compression for ultra-low latency vision streaming (< 15ms vision tile ingest)
     let processedImg = cropped;
     const croppedSize = cropped.getSize();
-    const isLargeArea = (croppedSize.width > 900 || croppedSize.height > 900);
-    const maxDimension = isLargeArea ? 1024 : 800; // 1280 : 1024
     const jpegQuality = 80; // jpegQuality = 75
 
     if (croppedSize.width > maxDimension || croppedSize.height > maxDimension) {
@@ -867,7 +882,7 @@ function cropFreezeImageNative(freezeSnapshot, rect, bounds = null) {
         newH = maxDimension;
         newW = Math.max(1, Math.round((croppedSize.width / croppedSize.height) * maxDimension));
       }
-      processedImg = cropped.resize({ width: newW, height: newH, quality: 'good' });
+      processedImg = cropped.resize({ width: newW, height: newH, quality: 'better' });
     }
 
     const jpegBuf = processedImg.toJPEG(jpegQuality);

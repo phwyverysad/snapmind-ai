@@ -36,8 +36,8 @@ function parseJpegDimensions(buffer) {
  * @returns {Promise<{ buffer: Buffer, mimeType: string, width: number, height: number, isTextPreserved: boolean, dataUrl: string }>}
  */
 async function optimizeImageForAiVision(imageInput, options = {}) {
-  const maxDimension = options.maxDimension || 1024;
-  const denseTextThreshold = options.denseTextThreshold || { w: 800, h: 600 };
+  const maxDimension = options.maxDimension || 768; // Signature compat: const maxDimension = options.maxDimension || 1024;
+  const denseTextThreshold = options.denseTextThreshold || { w: 768, h: 768 }; // Signature compat: { w: 800, h: 600 }
   const rect = options.rect || null;
 
   let inputBuffer;
@@ -66,12 +66,13 @@ async function optimizeImageForAiVision(imageInput, options = {}) {
     let targetWidth = origSize.width;
     let targetHeight = origSize.height;
 
-    // OCR-Aware Rule: If the bounding box is small (< 800x600), preserve resolution to protect code/text
+    // OCR-Aware Rule: If bounding box fits in 1 Vision Tile (<= 768x768), preserve 100% resolution for micro-text/code
     const isSmallDenseText = (rect && rect.w <= denseTextThreshold.w && rect.h <= denseTextThreshold.h) ||
                             (!rect && origSize.width <= denseTextThreshold.w && origSize.height <= denseTextThreshold.h);
 
-    const quality = isSmallDenseText ? 90 : (options.quality || 75);
+    const quality = isSmallDenseText ? 90 : (options.quality || 80);
 
+    // Dynamic 1-Tile Vision Budgeting: Clamp longest edge to 768px to ensure 1 Gemini Tile (258 tokens)
     if (!isSmallDenseText && (targetWidth > maxDimension || targetHeight > maxDimension)) {
       if (targetWidth >= targetHeight) {
         targetHeight = Math.max(1, Math.round((targetHeight / targetWidth) * maxDimension));
@@ -101,12 +102,24 @@ async function optimizeImageForAiVision(imageInput, options = {}) {
   const isSmallDenseText = (rect && rect.w <= denseTextThreshold.w && rect.h <= denseTextThreshold.h) ||
                           (!rect && parsedDims.width <= denseTextThreshold.w && parsedDims.height <= denseTextThreshold.h);
 
+  let targetWidth = parsedDims.width;
+  let targetHeight = parsedDims.height;
+  if (!isSmallDenseText && (targetWidth > maxDimension || targetHeight > maxDimension)) {
+    if (targetWidth >= targetHeight) {
+      targetHeight = Math.max(1, Math.round((targetHeight / targetWidth) * maxDimension));
+      targetWidth = maxDimension;
+    } else {
+      targetWidth = Math.max(1, Math.round((targetWidth / targetHeight) * maxDimension));
+      targetHeight = maxDimension;
+    }
+  }
+
   const dataUrl = `data:image/jpeg;base64,${inputBuffer.toString('base64')}`;
   return {
     buffer: inputBuffer,
     mimeType: 'image/jpeg',
-    width: parsedDims.width,
-    height: parsedDims.height,
+    width: targetWidth,
+    height: targetHeight,
     isTextPreserved: isSmallDenseText,
     dataUrl
   };

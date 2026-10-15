@@ -669,3 +669,22 @@ Run: `node test_zero_latency_screen_ai.js`
 git add test_zero_latency_screen_ai.js
 git commit -m "test: add comprehensive zero-latency screen stream AI benchmark suite"
 ```
+
+---
+
+### Task 7: Dynamic 1-Tile Vision Budgeting (768px Hard Ceiling) for Large Screen Area Streaming
+
+**Files:**
+- Modify: `imagePipeline.js`
+- Modify: `nativeBridge.js`
+- Modify: `main.js`
+- Test: `test_tile_budgeting_large_area.js`
+
+**Interfaces:**
+- Input: Screen selection rectangle with large dimensions (e.g. 1600x900, 1920x1080, 2560x1440)
+- Optimization Rule:
+  1. If `max(rect.w, rect.h) <= 768px`: preserve 100% native resolution for fine code / micro-text.
+  2. If `max(rect.w, rect.h) > 768px`: clamp the longest edge to 768px with high-fidelity Lanczos/Bicubic resampling (`quality: 'better'`), preserving aspect ratio.
+  3. Force visual payload to fit inside exactly 1 Gemini Vision Tile (258 tokens instead of 1,800+ tokens).
+- Output: Ultra-lean JPEG buffer (40-80 KB) delivering TTFT < 400ms on large screen streams.
+
