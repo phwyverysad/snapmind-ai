@@ -60,7 +60,7 @@ if (process.platform === 'win32' && app && typeof app.setAppUserModelId === 'fun
 
 // Single instance lock to prevent duplicate processes, shortcut conflicts, and data corruption
 const gotSingleInstanceLock = (app && typeof app.requestSingleInstanceLock === 'function')
-  ? app.requestSingleInstanceLock()
+  ? (process.env.ELECTRON_TEST_MODE ? true : app.requestSingleInstanceLock())
   : true;
 if (!gotSingleInstanceLock) {
   console.log('[App] Another instance of SnapMind AI is already running. Exiting duplicate instance immediately.');
@@ -476,10 +476,12 @@ function stripCodeExecutionAndExtractAnswer(text) {
 
   if (collectedOutputs.length > 0) {
     const combinedOutput = collectedOutputs.join('\n');
-    return stripLeadingAnswerPrefix(extractDirectAnswerFromOutput(combinedOutput));
+    const directAns = extractDirectAnswerFromOutput(combinedOutput);
+    if (directAns) return stripLeadingAnswerPrefix(directAns);
+    return stripLeadingAnswerPrefix(combinedOutput.trim());
   }
 
-  return '';
+  return (typeof text === 'string') ? text.trim() : '';
 }
 
 function getCandidateEndpoints(modelId) {
@@ -487,24 +489,29 @@ function getCandidateEndpoints(modelId) {
     'gemini-3.8-flash': [
       'gemini-3.8-flash',
       'gemini-3.5-flash-lite',
-      'gemini-3.1-pro-preview'
+      'gemini-3-flash-preview'
     ],
     'gemini-3.5-flash-lite': [
       'gemini-3.5-flash-lite',
-      'gemini-3.8-flash',
-      'gemini-3.1-pro-preview'
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash'
+    ],
+    'gemini-3-flash-preview': [
+      'gemini-3-flash-preview',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash'
     ],
     'gemini-3.1-pro-preview': [
       'gemini-3.1-pro-preview',
-      'gemini-3.8-flash',
-      'gemini-3.5-flash-lite'
+      'gemini-3.5-flash-lite',
+      'gemini-3-flash-preview'
     ]
   };
-  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3.8-flash';
+  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3.5-flash-lite';
   const fallbacks = specificFallbacks[modelId] || [
-    'gemini-3.8-flash',
     'gemini-3.5-flash-lite',
-    'gemini-3.1-pro-preview'
+    'gemini-3-flash-preview',
+    'gemini-3.8-flash'
   ];
   const allCandidates = Array.from(new Set([primary, ...fallbacks]));
   // Order healthy endpoints first to guarantee sub-second first token latency
@@ -3302,13 +3309,16 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
         if (cleanAnswer) {
           fullText = cleanAnswer;
           onChunk(cleanAnswer, endpoint);
+        } else if (combinedOutput.trim()) {
+          fullText = combinedOutput.trim();
+          onChunk(fullText, endpoint);
         }
       }
 
       if (fullText && fullText.trim().length > 0) {
         const cleanAnswer = stripLeadingAnswerPrefix(stripCodeExecutionAndExtractAnswer(fullText));
-        if (cleanAnswer) {
-          fullText = cleanAnswer;
+        if (cleanAnswer && cleanAnswer.trim()) {
+          fullText = cleanAnswer.trim();
         }
         recordEndpointStatus(endpoint, 200);
         usedEndpoint = endpoint;
@@ -4176,25 +4186,31 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
     userParts.push({ text: 'วิเคราะห์และให้คำตอบจากภาพนี้' });
   }
 
-  const requestPayload = {
-    system_instruction: {
-      parts: [
-        { text: systemInstructionText }
-      ]
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: userParts
+    const shouldEnableCodeExecution = Boolean(
+      isMath &&
+      currentConfig?.tools?.enableCodeExecution !== false &&
+      !['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory)
+    );
+
+    const requestPayload = {
+      system_instruction: {
+        parts: [
+          { text: systemInstructionText }
+        ]
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: userParts
+        }
+      ],
+      tools: shouldEnableCodeExecution ? [{ codeExecution: {} }] : undefined,
+      generationConfig: {
+        temperature: 0.0,
+        maxOutputTokens: maxTokens,
+        ...getThinkingConfigForModel(selectedModel)
       }
-    ],
-    tools: (!['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory) && (isMath || (currentConfig?.tools?.enableCodeExecution !== false && ['answer', 'custom_ask', 'explain'].includes(resolvedCategory)))) ? [{ codeExecution: {} }] : undefined,
-    generationConfig: {
-      temperature: 0.0,
-      maxOutputTokens: maxTokens,
-      ...getThinkingConfigForModel(selectedModel)
-    }
-  };
+    };
 
   let usedEndpoint = selectedModel;
 
@@ -4340,25 +4356,31 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
     userParts.push({ text: 'วิเคราะห์และให้คำตอบจากภาพนี้' });
   }
 
-  const requestPayload = {
-    system_instruction: {
-      parts: [
-        { text: systemInstructionText }
-      ]
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: userParts
+    const shouldEnableCodeExecution = Boolean(
+      isMath &&
+      currentConfig?.tools?.enableCodeExecution !== false &&
+      !['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory)
+    );
+
+    const requestPayload = {
+      system_instruction: {
+        parts: [
+          { text: systemInstructionText }
+        ]
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: userParts
+        }
+      ],
+      tools: shouldEnableCodeExecution ? [{ codeExecution: {} }] : undefined,
+      generationConfig: {
+        temperature: 0.0,
+        maxOutputTokens: maxTokens,
+        ...getThinkingConfigForModel(selectedModel)
       }
-    ],
-    tools: (!['translate', 'translate_th', 'ocr', 'proofread', 'continue_writing'].includes(resolvedCategory) && (isMath || (currentConfig?.tools?.enableCodeExecution !== false && ['answer', 'custom_ask', 'explain'].includes(resolvedCategory)))) ? [{ codeExecution: {} }] : undefined,
-    generationConfig: {
-      temperature: 0.0,
-      maxOutputTokens: maxTokens,
-      ...getThinkingConfigForModel(selectedModel)
-    }
-  };
+    };
 
   return {
     cached: false,

@@ -5278,10 +5278,16 @@ async function executeScreenPromptWithModel(promptId, customQuestion, croppedBas
       imageBase64: croppedBase64
     });
 
-    if (res && res.fullText) {
-      renderQuickAnswerContent(res.fullText);
+    const textToRender = (res && res.fullText && res.fullText.trim())
+      ? res.fullText
+      : (quickAnswerStreamText && quickAnswerStreamText.trim() ? quickAnswerStreamText : '');
+
+    if (textToRender) {
+      renderQuickAnswerContent(textToRender, true);
       const status = document.getElementById('quickAnswerStatus');
-      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res?.durationSec || '0.5'}s)`;
+    } else {
+      handleQuickAnswerError({ error: 'ไม่พบคำตอบจาก AI สำหรับพื้นที่ที่เลือก กรุณาลองเลือกพื้นที่ใหม่หรือระบุคำถามเพิ่มเติม' });
     }
   } catch (err) {
     handleQuickAnswerError({ error: err.message });
@@ -5313,20 +5319,23 @@ async function executeScreenPrompt(promptId, customQuestion = null) {
     modelSel.value = modelToUse;
   }
 
-  showQuickAnswerState(actionName);
-  updateSmartScreenToolbarPosition(box);
-
   try {
+    // 1. Crop image immediately before showQuickAnswerState clears the canvas overlay
     let croppedBase64 = null;
     if (window.electronAPI && window.electronAPI.cropArea) {
-      croppedBase64 = await window.electronAPI.cropArea(box);
+      try {
+        croppedBase64 = await window.electronAPI.cropArea(box);
+      } catch (e) {}
     }
     if (!croppedBase64 && canvas) {
       croppedBase64 = getCanvasCroppedDataUrl(box);
     }
 
+    showQuickAnswerState(actionName);
+    updateSmartScreenToolbarPosition(box);
+
     if (!croppedBase64) {
-      throw new Error('ไม่สามารถตัดภาพหน้าจอได้');
+      throw new Error('ไม่สามารถตัดภาพหน้าจอได้ กรุณาลองใหม่อีกครั้ง');
     }
 
     lastCapturedScreenImage = croppedBase64;
@@ -5349,10 +5358,16 @@ async function executeScreenPrompt(promptId, customQuestion = null) {
       imageBase64: croppedBase64
     });
 
-    if (res && res.fullText) {
-      renderQuickAnswerContent(res.fullText);
+    const textToRender = (res && res.fullText && res.fullText.trim())
+      ? res.fullText
+      : (quickAnswerStreamText && quickAnswerStreamText.trim() ? quickAnswerStreamText : '');
+
+    if (textToRender) {
+      renderQuickAnswerContent(textToRender, true);
       const status = document.getElementById('quickAnswerStatus');
-      if (status) status.innerText = `ตอบเสร็จสิ้น (${res.durationSec || '0.5'}s)`;
+      if (status) status.innerText = `ตอบเสร็จสิ้น (${res?.durationSec || '0.5'}s)`;
+    } else {
+      handleQuickAnswerError({ error: 'ไม่พบคำตอบจาก AI สำหรับพื้นที่ที่เลือก กรุณาลองเลือกพื้นที่ใหม่หรือระบุคำถามเพิ่มเติม' });
     }
   } catch (err) {
     handleQuickAnswerError({ error: err.message });
