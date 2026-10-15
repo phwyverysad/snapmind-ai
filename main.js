@@ -2691,6 +2691,20 @@ ipcMain.handle('write-clipboard-text', (event, text) => {
 });
 
 // Multi-Monitor Aware Screen Cropping & Image Optimization (Direct Helper)
+async function cropAreaDirectToBuffer(rect) {
+  if (nativeBridge && nativeBridge.cropRectDirectToBuffer) {
+    try {
+      const buf = nativeBridge.cropRectDirectToBuffer(rect);
+      if (buf && buf.length > 0) return buf;
+    } catch (e) {}
+  }
+  const dataUrl = await cropAreaDirect(rect);
+  if (!dataUrl) return null;
+  const commaIdx = dataUrl.indexOf(',');
+  const base64 = commaIdx !== -1 ? dataUrl.substring(commaIdx + 1) : dataUrl;
+  return base64 ? Buffer.from(base64, 'base64') : null;
+}
+
 async function cropAreaDirect(rect) {
   const combinedBounds = getCombinedDisplaysBounds();
 

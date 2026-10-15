@@ -964,6 +964,35 @@ function getLastSelectedCategoryNative() {
   return 1;
 }
 
+function getSharedScreenFrameBuffer() {
+  if (!initNativeCapture() || !sharedCaptureBuffer) return null;
+  return sharedCaptureBuffer;
+}
+
+function cropRectDirectToBuffer(rect, quality = 80) {
+  if (!initNativeCapture() || !fnNativeCropScreenRectToJpeg || !rect || rect.w <= 0 || rect.h <= 0) return null;
+  try {
+    const cropBuf = Buffer.alloc(4 * 1024 * 1024);
+    const cropSize = [0];
+    const ok = fnNativeCropScreenRectToJpeg(
+      Math.round(rect.x),
+      Math.round(rect.y),
+      Math.round(rect.w),
+      Math.round(rect.h),
+      cropBuf,
+      cropBuf.length,
+      cropSize,
+      quality
+    );
+    if (ok && cropSize[0] > 0) {
+      return cropBuf.subarray(0, cropSize[0]);
+    }
+  } catch (err) {
+    console.warn('[NativeBridge] cropRectDirectToBuffer error:', err.message);
+  }
+  return null;
+}
+
 module.exports = {
   initNativeBridge,
   isDllAvailable,
@@ -990,6 +1019,8 @@ module.exports = {
   NATIVE_CATEGORY_KEY_MAP,
   captureScreenFreezeNativeFast,
   cropFreezeImageNativeFast,
+  cropRectDirectToBuffer,
+  getSharedScreenFrameBuffer,
   captureScreenFreezeNative,
   cropFreezeImageNative,
   saveForegroundWindow,
