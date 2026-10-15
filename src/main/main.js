@@ -237,10 +237,10 @@ const DEFAULT_CONFIG = {
   hasEnvApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
   shortcutKey: 'Alt+Shift+S',
   quickTextShortcutKey: 'Ctrl+CapsLock',
-  defaultModel: 'gemini-3.8-flash',
+  defaultModel: 'gemini-3.5-flash-lite',
   modelThinking: {
-    'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
+    'gemini-3.8-flash': false,
     'gemini-3.1-pro-preview': true
   },
   textPrompts: DEFAULT_TEXT_PROMPTS,
@@ -657,9 +657,9 @@ function loadConfig() {
       }
 
       // Ensure defaultModel is set and strictly among allowed models
-      const validModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'];
+      const validModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'];
       if (!currentConfig.defaultModel || !validModels.includes(currentConfig.defaultModel)) {
-        currentConfig.defaultModel = 'gemini-3.8-flash';
+        currentConfig.defaultModel = 'gemini-3.5-flash-lite';
         configNeedsSave = true;
       }
 
@@ -764,7 +764,7 @@ async function saveHistoryItem(item) {
       category: categoryTitle,
       promptId: item.promptId || 'answer',
       model: modelTitle,
-      modelId: item.modelId || 'gemini-3.8-flash',
+      modelId: item.modelId || 'gemini-3.5-flash-lite',
       question: questionText,
       sourceSnippet: item.sourceSnippet || (questionText ? questionText.slice(0, 85) : ''),
       fullText: resultText,
@@ -2238,7 +2238,7 @@ function createTrayIcon() {
 }
 
 function updateTrayContextMenu() {
-  const currentModelId = currentConfig ? currentConfig.defaultModel : 'gemini-3.8-flash';
+  const currentModelId = currentConfig ? currentConfig.defaultModel : 'gemini-3.5-flash-lite';
 
   const modelSubmenu = TRAY_MODELS.map(m => ({
     label: m.name,
@@ -2607,7 +2607,7 @@ ipcMain.handle('gemini-tools-run-interaction', async (event, params) => {
   const toolsOptions = (currentConfig && currentConfig.tools) || DEFAULT_CONFIG.tools;
   return await geminiTools.runGeminiInteraction({
     apiKey,
-    modelId: params?.modelId || currentConfig.defaultModel || 'gemini-3.8-flash',
+    modelId: params?.modelId || currentConfig.defaultModel || 'gemini-3.5-flash-lite',
     input: params?.input,
     tools: params?.tools,
     toolsOptions: { ...toolsOptions, ...(params?.toolsOptions || {}) },
@@ -3063,7 +3063,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
     }
 
     const hasImage = Boolean(requestPayload && (JSON.stringify(requestPayload).includes('inlineData') || JSON.stringify(requestPayload).includes('inline_data') || JSON.stringify(requestPayload).includes('image_url')));
-    const connectTimeoutMs = hasImage ? 25000 : 8000;
+    const connectTimeoutMs = hasImage ? 5000 : 4000;
     let connectTimer = setTimeout(() => {
       isAbortedByTimeout = true;
       try { controller.abort(); } catch (e) {}
@@ -3203,7 +3203,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
       let receivedAnyChunk = false;
 
       // TTFT Watchdog: If connected but no chunk arrives within deadline, failover to next model
-      const ttftTimeoutMs = hasImage ? 25000 : 10000;
+      const ttftTimeoutMs = hasImage ? 5000 : 4000;
       let ttftTimer = setTimeout(() => {
         if (!receivedAnyChunk) {
           isAbortedByTimeout = true;
@@ -3361,7 +3361,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
 
 // Helper: Execute Screen Vision Streaming Analysis
 async function executeScreenStreamAnalysis({ base64Data, modelId, event, croppedDataUrl = null }) {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -3373,12 +3373,12 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
 
   const thinkingConf = getThinkingConfigForModel(selectedModel);
 
-  // High-Speed Multi-Category Structured Prompt: Streams Answer in ~1.5s, finishes all 5 tabs in ~2.8s
+  // High-Speed Multi-Category Structured Prompt: Streams Answer in ~1.5s, finishes all 5 tabs in ~2.0s
   const unifiedPromptText = `คุณคือระบบ AI วิเคราะห์ภาพถ่ายหน้าจอความเร็วสูง วิเคราะห์ภาพหน้าจอนี้อย่างถูกต้อง แม่นยำ กระชับ ตอบทุกหมวดหมู่ให้แสดงเฉพาะคำตอบหรือผลลัพธ์โดยตรงเท่านั้น (ไม่อารัมภบท ไม่ทักทาย ไม่ต้องเกริ่นนำ):
 ข้อกำหนดภาษา: ใช้ภาษาไทยและภาษาอังกฤษที่ถูกต้องตามหลักภาษาเท่านั้น ห้ามมีตัวอักษรหรืออักขระภาษาอื่นที่ไม่เกี่ยวข้อง (NEVER output or mix unrelated foreign scripts)
 หากภาพมีหลายข้อคำถามหรือหลายประเด็น ให้ตอบครบถ้วนทุกข้อตามลำดับ
 ### [ANSWER]
-ตอบตรงประเด็นทันที สั้นกระชับ 1-3 บรรทัดแรก ไม่อารัมภบท ไม่ทักทาย แสดงเฉพาะคำตอบหรือผลลัพธ์สุดท้ายโดยตรงทันที ไม่ต้องใส่คำว่า "คำตอบ:", "คำตอบคือ", หรือ "**คำตอบ:**" นำหน้าเด็ดขาด ให้แสดงเนื้อหาหรือผลลัพธ์คำตอบทันที หากมีหลายหัวข้อให้จัดเป็น Markdown bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย หากเป็นคำถามหรือโจทย์ ให้ระบุคำตอบหรือข้อที่ถูกต้อง (สูตรคณิตศาสตร์ใช้ LaTeX $...$ หรือ $$...$$) (หากเป็นโจทย์คณิตศาสตร์ ให้ใช้ Code Execution ในการคำนวณเบื้องหลัง และแสดงเฉพาะผลลัพธ์คำตอบทันที ไม่ต้องแสดงโค้ดหรือบล็อก Code Execution)
+ตอบตรงประเด็นทันที สั้นกระชับ 1-3 บรรทัดแรก ไม่อารัมภบท ไม่ทักทาย แสดงเฉพาะคำตอบหรือผลลัพธ์สุดท้ายโดยตรงทันที ไม่ต้องใส่คำว่า "คำตอบ:", "คำตอบคือ", หรือ "**คำตอบ:**" นำหน้าเด็ดขาด ให้แสดงเนื้อหาหรือผลลัพธ์คำตอบทันที หากมีหลายหัวข้อให้จัดเป็น Markdown bullet points พร้อมตัวหนา เช่น * **หัวข้อ:** คำอธิบาย หากเป็นคำถามหรือโจทย์ ให้ระบุคำตอบหรือข้อที่ถูกต้อง (สูตรคณิตศาสตร์ใช้ LaTeX $...$ หรือ $$...$$) (หากเป็นโจทย์คณิตศาสตร์ ให้คำนวณและแสดงเฉพาะผลลัพธ์คำตอบทันที สั้นกระชับ ไม่ต้องแสดงวิธีทำยาว)
 ### [EXPLAIN]
 แสดงเฉพาะเนื้อหาคำอธิบายเหตุผลหรือหลักการสำคัญโดยตรงทันที สั้นกระชับ 1-2 บรรทัด ไม่อารัมภบท ไม่ทักทาย ไม่ต้องใส่คำว่า "คำอธิบาย:" หรือเกริ่นนำใดๆ
 ### [SUMMARY]
@@ -3403,10 +3403,9 @@ async function executeScreenStreamAnalysis({ base64Data, modelId, event, cropped
         ]
       }
     ],
-    tools: [{ codeExecution: {} }],
     generationConfig: {
-      temperature: 0.15,
-      maxOutputTokens: 900,
+      temperature: 0.1,
+      maxOutputTokens: 650,
       ...thinkingConf
     }
   };
@@ -3489,7 +3488,7 @@ ipcMain.handle('crop-and-analyze-screen-stream', async (event, { rect, modelId }
 
 // On-Demand Category Generation (for lazy loading tabs like OCR or in-depth Explain)
 ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, modelId, contextAnswer }) => {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -3514,11 +3513,10 @@ ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, mo
 
   const payload = {
     contents: [{ parts }],
-    tools: (category === 'ocr') ? undefined : [{ codeExecution: {} }],
     generationConfig: {
-      temperature: 0.15,
-      maxOutputTokens: 4096,
-      thinkingConfig: (selectedModel && selectedModel.includes('flash-lite')) ? undefined : { thinkingBudget: 0 }
+      temperature: 0.1,
+      maxOutputTokens: 2048,
+      thinkingConfig: (selectedModel && (selectedModel.includes('flash-lite') || selectedModel.includes('lite'))) ? undefined : { thinkingBudget: 0 }
     }
   };
 
@@ -3537,7 +3535,7 @@ ipcMain.handle('gemini-fetch-category', async (event, { base64Data, category, mo
 
 // Secure Main Process Gemini Follow-up Chat API Handler (Multi-turn Context Aware)
 ipcMain.handle('gemini-chat-message', async (event, { query, modelId, context, history }) => {
-  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
   const isMath = isMathProblem(query);
 
   const contents = [];
@@ -4098,7 +4096,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   } catch (e) {}
 
   const isMath = isMathProblem(promptText);
-  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
 
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
@@ -4314,7 +4312,7 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
   } catch (e) {}
 
   const isMath = isMathProblem(promptText);
-  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.8-flash';
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
 
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
@@ -4423,7 +4421,8 @@ module.exports = {
   fastExtractSsePartText,
   stripLeadingAnswerPrefix,
   extractDirectAnswerFromOutput,
-  stripCodeExecutionAndExtractAnswer
+  stripCodeExecutionAndExtractAnswer,
+  executeScreenStreamAnalysis
 };
 
 

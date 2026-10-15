@@ -11,20 +11,20 @@ if (typeof marked !== 'undefined') {
 // === MAIN FLAGSHIP AI MODELS ===
 const AI_MODELS = [
   {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Lite',
+    tag: 'Ultra-Fast',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที (แนะนำ: ปิด Thinking เพื่อตอบทันที)'
+  },
+  {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',
     tag: 'Flash',
     tagClass: 'flash',
     defaultThinking: false,
     desc: 'โมเดลหลัก เร็วและฉลาดสมดุล (แนะนำ: ปิด Thinking เพื่อตอบไว ~1 วินาที)'
-  },
-  {
-    id: 'gemini-3.5-flash-lite',
-    name: 'Gemini 3.5 Flash Lite',
-    tag: 'Lite',
-    tagClass: 'flash',
-    defaultThinking: false,
-    desc: 'โมเดลความเร็วสูงพิเศษ กินทรัพยากรน้อย (แนะนำ: ปิด Thinking เพื่อตอบทันที)'
   },
   {
     id: 'gemini-3.1-pro-preview',
@@ -38,8 +38,8 @@ const AI_MODELS = [
 
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints
 const MODEL_API_ENDPOINT_MAP = {
-  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };
 
@@ -198,17 +198,17 @@ let appSettings = {
   apiKey: '',
   shortcutKey: 'Alt+Shift+S',
   quickTextShortcutKey: 'Ctrl+CapsLock',
-  defaultModel: 'gemini-3.8-flash',
+  defaultModel: 'gemini-3.5-flash-lite',
   modelThinking: {
-    'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
+    'gemini-3.8-flash': false,
     'gemini-3.1-pro-preview': true
   },
   textPrompts: []
 };
 
-let currentSelectedModel = 'gemini-3.8-flash';
-let selectedModalModelId = 'gemini-3.8-flash';
+let currentSelectedModel = 'gemini-3.5-flash-lite';
+let selectedModalModelId = 'gemini-3.5-flash-lite';
 
 // Quick Text Ask State
 let currentCapturedText = '';
@@ -330,7 +330,7 @@ async function reanalyzeWithNewModel() {
   if (!finalImg) return;
 
   const streamStartTime = performance.now();
-  const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
+  const selectedModel = currentSelectedModel || 'gemini-3.5-flash-lite';
   let hasAnswerCompleted = false;
   let firstAnswerDurationSec = null;
   let screenAnswerWatchdog = null;
@@ -505,7 +505,7 @@ function setupModalBackdropClose() {
 async function initApp() {
   if (window.electronAPI) {
     appSettings = await window.electronAPI.getSettings();
-    currentSelectedModel = appSettings.defaultModel || 'gemini-3.8-flash';
+    currentSelectedModel = appSettings.defaultModel || 'gemini-3.5-flash-lite';
     if (Array.isArray(appSettings.textPrompts) && appSettings.textPrompts.length > 0) {
       currentQuickPrompts = [...appSettings.textPrompts];
     }
@@ -1763,7 +1763,7 @@ function triggerAutoOcr() {
     window.electronAPI.fetchCategory({
       base64Data: currentCroppedBase64,
       category: 'ocr',
-      modelId: currentSelectedModel || 'gemini-3.8-flash'
+      modelId: currentSelectedModel || 'gemini-3.5-flash-lite'
     }).then(res => {
       if (res && res.text) {
         currentAnalysisResult.ocr = res.text.trim();
@@ -1795,7 +1795,7 @@ function triggerAutoExplain() {
       base64Data: currentCroppedBase64,
       category: 'explain',
       contextAnswer: currentAnalysisResult?.answer || '',
-      modelId: currentSelectedModel || 'gemini-3.8-flash'
+      modelId: currentSelectedModel || 'gemini-3.5-flash-lite'
     }).then(res => {
       if (res && res.text) {
         currentAnalysisResult.explain = res.text.trim();
@@ -2340,7 +2340,7 @@ async function legacyProcessScreenCapture(cropBox) {
     });
 
     // 5. Zero-Bounce Unified Screen Streaming Pipeline
-    const selectedModel = currentSelectedModel || 'gemini-3.8-flash';
+    const selectedModel = currentSelectedModel || 'gemini-3.5-flash-lite';
     if (window.electronAPI && window.electronAPI.cropAndAnalyzeScreenStream) {
       const res = await window.electronAPI.cropAndAnalyzeScreenStream({ rect: cropBox, modelId: selectedModel });
       if (res && res.croppedDataUrl) {
@@ -3063,7 +3063,7 @@ async function sendUserMessage() {
   }
 
   try {
-    const modelId = currentSelectedModel || 'gemini-3.8-flash';
+    const modelId = currentSelectedModel || 'gemini-3.5-flash-lite';
     const result = await window.electronAPI.sendChatMessage(query, modelId, currentAnalysisResult, followUpChatMessages);
 
     metricsBanner.classList.remove('thinking');
@@ -3300,15 +3300,15 @@ function renderThinkingModelSettings() {
   container.innerHTML = '';
 
   const currentThinking = appSettings.modelThinking || {
-    'gemini-3.8-flash': false,
     'gemini-3.5-flash-lite': false,
+    'gemini-3.8-flash': false,
     'gemini-3.1-pro-preview': true
   };
 
   const thinkingKeys = appSettings.modelThinking ? Object.keys(appSettings.modelThinking) : null;
   const coreModels = thinkingKeys && thinkingKeys.length <= 3
     ? AI_MODELS.filter(m => thinkingKeys.includes(m.id))
-    : AI_MODELS.filter(m => ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'].includes(m.id));
+    : AI_MODELS.filter(m => ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'].includes(m.id));
   coreModels.forEach(model => {
     const isEnabled = currentThinking[model.id] !== undefined
       ? Boolean(currentThinking[model.id])
@@ -4106,7 +4106,7 @@ async function executeQuickPrompt(promptId) {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
       promptText: finalPrompt,
-      modelId: currentSelectedModel || 'gemini-3.8-flash'
+      modelId: currentSelectedModel || 'gemini-3.5-flash-lite'
     });
 
     if (res && res.fullText) {
@@ -4133,7 +4133,7 @@ async function executeQuickPromptWithModel(promptId, modelId) {
     quickAnswerStreamText = '';
     const res = await window.electronAPI.quickTextAsk({
       promptText: finalPrompt,
-      modelId: modelId || currentSelectedModel || 'gemini-3.8-flash'
+      modelId: modelId || currentSelectedModel || 'gemini-3.5-flash-lite'
     });
 
     if (res && res.fullText) {
@@ -5252,7 +5252,7 @@ async function executeScreenPromptWithModel(promptId, customQuestion, croppedBas
   const promptDef = SMART_SCREEN_PROMPTS.find(p => p.id === promptId);
   const actionName = customQuestion ? 'คำถามของคุณ' : (promptDef ? promptDef.name : 'วิเคราะห์');
   const promptText = customQuestion || (promptDef ? promptDef.prompt : 'วิเคราะห์และตอบคำถามจากภาพนี้');
-  const modelToUse = modelId || currentSelectedModel || 'gemini-3.8-flash';
+  const modelToUse = modelId || currentSelectedModel || 'gemini-3.5-flash-lite';
 
   lastScreenExecutionParams = {
     promptId,
@@ -5312,7 +5312,7 @@ async function executeScreenPrompt(promptId, customQuestion = null) {
   const promptDef = SMART_SCREEN_PROMPTS.find(p => p.id === promptId);
   const actionName = customQuestion ? 'คำถามของคุณ' : (promptDef ? promptDef.name : 'วิเคราะห์');
   const promptText = customQuestion || (promptDef ? promptDef.prompt : 'วิเคราะห์และตอบคำถามจากภาพนี้');
-  const modelToUse = currentSelectedModel || 'gemini-3.8-flash';
+  const modelToUse = currentSelectedModel || 'gemini-3.5-flash-lite';
 
   const modelSel = document.getElementById('quickModelSelect');
   if (modelSel && modelSel.value !== modelToUse) {

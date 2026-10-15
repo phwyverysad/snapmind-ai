@@ -39,7 +39,7 @@ function isTextInputFocusedOrCustomOpen() {
   }
   return false;
 }
-let currentActiveToolbarModel = 'gemini-3.8-flash';
+let currentActiveToolbarModel = 'gemini-3.5-flash-lite';
 let lastExecutedQuickPromptParams = null;
 let cachedConfig = null;
 
@@ -687,7 +687,7 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
 
   quickAnswerStreamText = '';
 
-  const activeModel = modelId || currentActiveToolbarModel || 'gemini-3.8-flash';
+  const activeModel = modelId || currentActiveToolbarModel || 'gemini-3.5-flash-lite';
   currentActiveToolbarModel = activeModel;
 
   const modelSel = document.getElementById('quickModelSelect');
@@ -733,8 +733,8 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
       let finalFullText = '';
 
       const hasImage = Boolean(imageToUse);
-      const fetchTimeoutMs = hasImage ? 25000 : 8000;
-      const ttftTimeoutMs = hasImage ? 25000 : 10000;
+      const fetchTimeoutMs = hasImage ? 5000 : 4000;
+      const ttftTimeoutMs = hasImage ? 5000 : 4000;
 
       for (let i = 0; i < (endpointsToTry ? endpointsToTry.length : 0); i++) {
         const endpoint = endpointsToTry[i];
