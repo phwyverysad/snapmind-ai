@@ -237,9 +237,11 @@ const DEFAULT_CONFIG = {
   hasEnvApiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
   shortcutKey: 'Alt+Shift+S',
   quickTextShortcutKey: 'Ctrl+CapsLock',
-  defaultModel: 'gemini-3.5-flash-lite',
+  defaultModel: 'gemini-3.5-flash',
   modelThinking: {
+    'gemini-3.5-flash': false,
     'gemini-3.5-flash-lite': false,
+    'gemini-3.6-flash': false,
     'gemini-3.8-flash': false,
     'gemini-3.1-pro-preview': true
   },
@@ -262,16 +264,18 @@ const DEFAULT_CONFIG = {
 
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints (Main Flagship Models)
 const MODEL_API_ENDPOINT_MAP = {
+  'gemini-3.5-flash': 'gemini-3.5-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
-  'gemini-3-flash-preview': 'gemini-3-flash-preview',
-  'gemini-3.8-flash': 'gemini-3.8-flash',
+  'gemini-3.6-flash': 'gemini-3.6-flash',
+  'gemini-3-flash-preview': 'gemini-3.5-flash',
+  'gemini-3.8-flash': 'gemini-3.5-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };
 
 const TRAY_MODELS = [
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' },
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
 ];
 
@@ -488,32 +492,42 @@ function stripCodeExecutionAndExtractAnswer(text) {
 
 function getCandidateEndpoints(modelId) {
   const specificFallbacks = {
-    'gemini-3.8-flash': [
-      'gemini-3.8-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3-flash-preview'
+    'gemini-3.5-flash': [
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite'
     ],
     'gemini-3.5-flash-lite': [
+      'gemini-3.5-flash',
       'gemini-3.5-flash-lite',
-      'gemini-3-flash-preview',
-      'gemini-3.8-flash'
+      'gemini-3.6-flash'
+    ],
+    'gemini-3.6-flash': [
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite'
     ],
     'gemini-3-flash-preview': [
-      'gemini-3-flash-preview',
-      'gemini-3.5-flash-lite',
-      'gemini-3.8-flash'
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite'
+    ],
+    'gemini-3.8-flash': [
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite'
     ],
     'gemini-3.1-pro-preview': [
       'gemini-3.1-pro-preview',
-      'gemini-3.5-flash-lite',
-      'gemini-3-flash-preview'
+      'gemini-3.5-flash',
+      'gemini-3.6-flash'
     ]
   };
-  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3.5-flash-lite';
+  const primary = MODEL_API_ENDPOINT_MAP[modelId] || modelId || 'gemini-3.5-flash';
   const fallbacks = specificFallbacks[modelId] || [
-    'gemini-3.5-flash-lite',
-    'gemini-3-flash-preview',
-    'gemini-3.8-flash'
+    'gemini-3.5-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite'
   ];
   const allCandidates = Array.from(new Set([primary, ...fallbacks]));
   // Order healthy endpoints first to guarantee sub-second first token latency
@@ -659,9 +673,9 @@ function loadConfig() {
       }
 
       // Ensure defaultModel is set and strictly among allowed models
-      const validModels = ['gemini-3.5-flash-lite', 'gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'];
+      const validModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'];
       if (!currentConfig.defaultModel || !validModels.includes(currentConfig.defaultModel)) {
-        currentConfig.defaultModel = 'gemini-3.5-flash-lite';
+        currentConfig.defaultModel = 'gemini-3.5-flash';
         configNeedsSave = true;
       }
 
@@ -1281,6 +1295,8 @@ function startQuickTextMode(cursorPos, text) {
   isQuickTextActive = true;
   isAnswerCardActive = false;
   isSnippingActive = false;
+  lastCapturedScreenImage = null;
+  lastCapturedCropBox = null;
 
   // Mutual exclusion: dismiss in-window quick text container in mainWindow
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3065,7 +3081,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
     }
 
     const hasImage = Boolean(requestPayload && (JSON.stringify(requestPayload).includes('inlineData') || JSON.stringify(requestPayload).includes('inline_data') || JSON.stringify(requestPayload).includes('image_url')));
-    const connectTimeoutMs = hasImage ? 5000 : 4000;
+    const connectTimeoutMs = hasImage ? 12000 : 10000;
     let connectTimer = setTimeout(() => {
       isAbortedByTimeout = true;
       try { controller.abort(); } catch (e) {}
@@ -3176,7 +3192,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
           const retryMatch = apiMessage.match(/retry in ([0-9\.]+)s/i);
           const retryWaitSec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 25;
           recordEndpointStatus(endpoint, 429, retryWaitSec * 1000);
-          if (consecutive429Count >= 2) {
+          if (consecutive429Count >= 3) {
             throw new Error(`โควต้าฟรีของ Google AI Studio ชั่วคราวเต็ม (Rate Limit 429) กรุณารอสักครู่แล้วลองใหม่อีกครั้ง`);
           }
           lastError = new Error(`โควต้าฟรีของโมเดล "${endpoint}" เต็มชั่วคราว (Rate Limit 429) ระบบกำลังสลับไปยังโมเดลสำรองอัตโนมัติ...`);
@@ -3205,7 +3221,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
       let receivedAnyChunk = false;
 
       // TTFT Watchdog: If connected but no chunk arrives within deadline, failover to next model
-      const ttftTimeoutMs = hasImage ? 5000 : 4000;
+      const ttftTimeoutMs = hasImage ? 12000 : 10000;
       let ttftTimer = setTimeout(() => {
         if (!receivedAnyChunk) {
           isAbortedByTimeout = true;
@@ -3363,7 +3379,7 @@ async function executeSingleGeminiStream(apiKey, endpointCandidates, requestPayl
 
 // Helper: Execute Screen Vision Streaming Analysis
 async function executeScreenStreamAnalysis({ base64Data, modelId, event, croppedDataUrl = null, rect = null }) {
-  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
+  const selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash';
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
   if (keyErr) throw keyErr;
@@ -4157,7 +4173,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
   } catch (e) {}
 
   const isMath = isMathProblem(promptText);
-  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash';
 
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
@@ -4173,7 +4189,8 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
     systemInstructionText += MATH_CODE_EXECUTION_SYSTEM_INSTRUCTION;
   }
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 4096;
-  const imageToUse = imageBase64 || lastCapturedScreenImage;
+  const isScreenSource = (sourceType === 'screen') || Boolean(imageBase64);
+  const imageToUse = isScreenSource ? (imageBase64 || lastCapturedScreenImage) : null;
 
   // Check Perceptual Image Hash 0ms Cache for identical screen regions & questions
   let currentImageHash = null;
@@ -4359,7 +4376,7 @@ ipcMain.handle('gemini-quick-text-ask', async (event, { promptText, modelId, pro
 });
 
 // IPC Handler: Prepare parameters for Direct Renderer Streaming and check LRU Cache
-ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, categoryName, modelId, imageBase64 }) => {
+ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, categoryName, modelId, sourceType, imageBase64, rect }) => {
   isSnippingActive = false;
   isAnswerCardActive = true;
   try {
@@ -4373,7 +4390,7 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
   } catch (e) {}
 
   const isMath = isMathProblem(promptText);
-  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash-lite';
+  let selectedModel = modelId || (currentConfig && currentConfig.defaultModel) || 'gemini-3.5-flash';
 
   const apiKey = getEffectiveApiKey(selectedModel);
   const keyErr = validateApiKeyFormat(apiKey, selectedModel);
@@ -4388,7 +4405,8 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
     systemInstructionText += MATH_CODE_EXECUTION_SYSTEM_INSTRUCTION;
   }
   const maxTokens = CATEGORY_MAX_OUTPUT_TOKENS[resolvedCategory] || 4096;
-  const imageToUse = imageBase64 || lastCapturedScreenImage;
+  const isScreenSource = (sourceType === 'screen') || Boolean(imageBase64);
+  const imageToUse = isScreenSource ? (imageBase64 || lastCapturedScreenImage) : null;
 
   const isPro = selectedModel && (selectedModel.includes('pro') || selectedModel.includes('thinking'));
   const isFlashLite = selectedModel && selectedModel.includes('flash-lite');
@@ -4401,7 +4419,13 @@ ipcMain.handle('get-quick-stream-params', async (event, { promptText, promptId, 
 
   const userParts = [];
   if (imageToUse) {
-    const cleanBase64 = imageToUse.replace(/^data:image\/\w+;base64,/, '');
+    let cleanBase64 = null;
+    try {
+      const opt = await optimizeImageForAiVision(imageToUse, { maxDimension: 768, rect: rect || lastCapturedCropBox });
+      cleanBase64 = opt.buffer.toString('base64');
+    } catch (optErr) {
+      cleanBase64 = imageToUse.replace(/^data:image\/\w+;base64,/, '');
+    }
     userParts.push({
       inlineData: {
         mimeType: 'image/jpeg',

@@ -39,7 +39,7 @@ function isTextInputFocusedOrCustomOpen() {
   }
   return false;
 }
-let currentActiveToolbarModel = 'gemini-3.5-flash-lite';
+let currentActiveToolbarModel = 'gemini-3.5-flash';
 let lastExecutedQuickPromptParams = null;
 let cachedConfig = null;
 
@@ -55,7 +55,9 @@ window.setCachedConfigForTesting = (cfg) => {
 };
 
 const MODEL_DISPLAY_NAMES = {
+  'gemini-3.5-flash': 'Gemini 3.5 Flash',
   'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+  'gemini-3.6-flash': 'Gemini 3.6 Flash',
   'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
   'gemini-3.8-flash': 'Gemini 3.8 Flash',
   'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview'
@@ -724,7 +726,9 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
         promptId,
         categoryName,
         imageBase64: imageToUse,
-        modelId: activeModel
+        modelId: activeModel,
+        sourceType: currentSourceType,
+        rect: currentCropBox
       });
 
       const { apiKey, endpointsToTry, requestPayload, selectedModel, resolvedCategory, optimizedPrompt } = params;
@@ -734,8 +738,8 @@ async function runQuickPromptStreaming({ promptText, promptId, categoryName, ima
       let finalFullText = '';
 
       const hasImage = Boolean(imageToUse);
-      const fetchTimeoutMs = hasImage ? 5000 : 4000;
-      const ttftTimeoutMs = hasImage ? 5000 : 4000;
+      const fetchTimeoutMs = hasImage ? 11000 : 9000;
+      const ttftTimeoutMs = hasImage ? 11000 : 9000;
 
       for (let i = 0; i < (endpointsToTry ? endpointsToTry.length : 0); i++) {
         const endpoint = endpointsToTry[i];

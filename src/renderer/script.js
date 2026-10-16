@@ -11,20 +11,36 @@ if (typeof marked !== 'undefined') {
 // === MAIN FLAGSHIP AI MODELS ===
 const AI_MODELS = [
   {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    tag: 'Ultra-Fast',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที เสถียร ไม่ติด Rate Limit'
+  },
+  {
     id: 'gemini-3.5-flash-lite',
     name: 'Gemini 3.5 Flash Lite',
-    tag: 'Ultra-Fast',
+    tag: 'Fast',
     tagClass: 'flash',
     defaultThinking: false,
     desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที (แนะนำ: ปิด Thinking เพื่อตอบทันที)'
   },
   {
-    id: 'gemini-3-flash-preview',
-    name: 'Gemini 3 Flash Preview',
-    tag: 'Sub-2s',
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    tag: 'Flash',
     tagClass: 'flash',
     defaultThinking: false,
-    desc: 'โมเดลความเร็วสูงพิเศษ ตอบไว 1-2 วินาที สตรีมเรียลทาม'
+    desc: 'โมเดลความเร็วสูงรุ่นใหม่ ตอบไว เสถียร'
+  },
+  {
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
+    tag: 'Preview',
+    tagClass: 'flash',
+    defaultThinking: false,
+    desc: 'โมเดลพรีวิวความเร็วสูง'
   },
   {
     id: 'gemini-3.8-flash',
@@ -46,9 +62,11 @@ const AI_MODELS = [
 
 // Map UI Model IDs to active Google AI Studio Gemini API endpoints
 const MODEL_API_ENDPOINT_MAP = {
+  'gemini-3.5-flash': 'gemini-3.5-flash',
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
-  'gemini-3-flash-preview': 'gemini-3-flash-preview',
-  'gemini-3.8-flash': 'gemini-3.8-flash',
+  'gemini-3.6-flash': 'gemini-3.6-flash',
+  'gemini-3-flash-preview': 'gemini-3.5-flash',
+  'gemini-3.8-flash': 'gemini-3.5-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
 };
 
